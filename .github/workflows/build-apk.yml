@@ -55,6 +55,15 @@ jobs:
             printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
           fi
 
+          if [[ ! -f debug.keystore ]]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
           if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
             printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/release-keystore.jks
             export KEYSTORE_PATH="$GITHUB_WORKSPACE/app/release-keystore.jks"
@@ -62,14 +71,6 @@ jobs:
             export KEY_ALIAS="${KEY_ALIAS:-androiddebugkey}"
             export KEY_PASSWORD="${KEY_PASSWORD:-android}"
           else
-            if [[ ! -f debug.keystore ]]; then
-              keytool -genkeypair -v \
-                -keystore debug.keystore \
-                -alias androiddebugkey \
-                -keyalg RSA -keysize 2048 -validity 10000 \
-                -storepass android -keypass android \
-                -dname "CN=Android Debug,O=Android,C=US"
-            fi
             export KEYSTORE_PATH="$GITHUB_WORKSPACE/debug.keystore"
             export KEYSTORE_PASSWORD="android"
             export KEY_ALIAS="androiddebugkey"
