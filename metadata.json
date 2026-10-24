@@ -1,0 +1,6 @@
+{
+  "name": "Nota Service",
+  "description": "Aplikasi Nota Service HP & Laptop modern untuk SE SMART CELL dengan cetak nota thermal & PDF, gambar nota WhatsApp, manajemen pembayaran, dan laporan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
