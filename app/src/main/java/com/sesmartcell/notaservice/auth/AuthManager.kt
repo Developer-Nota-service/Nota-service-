@@ -85,7 +85,7 @@ object AuthManager {
 
     suspend fun signInWithGoogle(context: Context): Result<AppUser> {
         return try {
-            val serverClientId = "287361834641-j0tk7a5d30v0675jtdkhujm2t996g2nc.apps.googleusercontent.com"
+            val serverClientId = context.getString(com.sesmartcell.notaservice.R.string.default_web_client_id)
             val googleOption = GetSignInWithGoogleOption.Builder(serverClientId)
                 .build()
 
