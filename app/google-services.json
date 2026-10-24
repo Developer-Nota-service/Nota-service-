@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "641783365971-bo7crd7aq4kkklbdjg9tm7npa5rhe7rs.apps.googleusercontent.com",
+          "client_id": "641783365971-fgo1nb217db1kpg3n9su3jad1r00fq0m.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.sesmartcell.notaservice",
-            "certificate_hash": "77c9f63216f3a70f5e5d1daa2237d94fff30102f"
+            "certificate_hash": "ab8ae7eaf5aa0f7763f5e869a67e034c3b7648a8"
           }
         },
         {
