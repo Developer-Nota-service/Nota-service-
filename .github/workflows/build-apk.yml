@@ -39,23 +39,47 @@ jobs:
         shell: bash
         env:
           FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x ./gradlew
+
           if [[ ! -f .env ]]; then
             cp .env.example .env
           fi
+
           if [[ -n "${FIREBASE_GOOGLE_SERVICES_JSON_B64:-}" ]]; then
             printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
           fi
-          if [[ ! -f debug.keystore ]]; then
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
+
+          if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/release-keystore.jks
+            export KEYSTORE_PATH="$GITHUB_WORKSPACE/app/release-keystore.jks"
+            export KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-android}"
+            export KEY_ALIAS="${KEY_ALIAS:-androiddebugkey}"
+            export KEY_PASSWORD="${KEY_PASSWORD:-android}"
+          else
+            if [[ ! -f debug.keystore ]]; then
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -alias androiddebugkey \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -storepass android -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            export KEYSTORE_PATH="$GITHUB_WORKSPACE/debug.keystore"
+            export KEYSTORE_PASSWORD="android"
+            export KEY_ALIAS="androiddebugkey"
+            export KEY_PASSWORD="android"
           fi
+
+          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
