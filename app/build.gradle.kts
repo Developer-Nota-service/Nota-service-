@@ -22,15 +22,15 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "my-upload-key.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+            storeFile = file("${rootDir}/my-upload-key.jks")
+            storePassword = "android"
+            keyAlias = "upload"
+            keyPassword = "android"
         }
         create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
+            storeFile = file("${rootDir}/my-upload-key.jks")
             storePassword = "android"
-            keyAlias = "androiddebugkey"
+            keyAlias = "upload"
             keyPassword = "android"
         }
     }
