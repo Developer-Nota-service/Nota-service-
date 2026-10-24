@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidString(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
+
+    function isValidUserDoc(data) {
+      return data.uid == request.auth.uid &&
+        isValidString(data.displayName, 2, 200) &&
+        isValidString(data.email, 3, 200) &&
+        isValidString(data.customUserId, 3, 100) &&
+        isValidString(data.customPassword, 6, 200) &&
+        data.loginMethod is string;
+    }
+
+    function isValidServiceNote(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.noteNumber, 1, 100) &&
+        isValidString(data.customerName, 1, 200) &&
+        isValidString(data.customerPhone, 7, 50) &&
+        isValidString(data.deviceType, 1, 100) &&
+        isValidString(data.brand, 1, 100) &&
+        isValidString(data.model, 1, 120) &&
+        isValidString(data.issueDescription, 1, 2000) &&
+        isValidString(data.serviceStatus, 1, 100);
+    }
+
+    function isValidPaymentRecord(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.noteNumber, 1, 100) &&
+        data.amount is number && data.amount >= 0 &&
+        isValidString(data.paymentMethod, 1, 50);
+    }
+
+    function isValidStoreSettings(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.storeName, 1, 200) &&
+        data.storePhone is string;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create, update: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      match /service_notes/{noteId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidServiceNote(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidServiceNote(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /payment_records/{paymentId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPaymentRecord(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidPaymentRecord(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /store_settings/{settingId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidStoreSettings(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
