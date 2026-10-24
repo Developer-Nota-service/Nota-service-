@@ -47,22 +47,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import com.sesmartcell.notaservice.R
+import com.sesmartcell.notaservice.auth.AppUser
 import com.sesmartcell.notaservice.auth.AuthManager
+import com.sesmartcell.notaservice.ui.ServiceViewModel
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlueLight
 import kotlinx.coroutines.launch
 
 @Composable
 fun AuthScreen(
+    viewModel: ServiceViewModel,
     onAuthSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var forgotIdentifier by remember { mutableStateOf("") }
     var recoveredInfo by remember { mutableStateOf<String?>(null) }
+    var registeredUser by remember { mutableStateOf<AppUser?>(null) }
+    var editableCustomId by remember { mutableStateOf("") }
+    var editableCustomPassword by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -166,27 +173,23 @@ fun AuthScreen(
                         onClick = {
                             if (!isLoading) {
                                 isLoading = true
-                                scope.launch {
-                                    val result = AuthManager.signInWithGoogle(context)
-                                    isLoading = false
-                                    result.fold(
-                                        onSuccess = { user ->
-                                            Toast.makeText(
-                                                context,
-                                                "Berhasil Masuk! User ID: ${user.customUserId}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                            onAuthSuccess()
-                                        },
-                                        onFailure = { e ->
-                                            Toast.makeText(
-                                                context,
-                                                "Login Gagal: ${e.localizedMessage ?: "Terjadi kesalahan"}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    )
-                                }
+                                viewModel.signInWithGoogle(
+                                    context = context,
+                                    onSuccess = { user ->
+                                        isLoading = false
+                                        registeredUser = user
+                                        editableCustomId = user.customUserId
+                                        editableCustomPassword = user.customPassword
+                                    },
+                                    onError = { errorMsg ->
+                                        isLoading = false
+                                        Toast.makeText(
+                                            context,
+                                            "Login Gagal: $errorMsg",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                )
                             }
                         },
                         enabled = !isLoading,
@@ -311,6 +314,79 @@ fun AuthScreen(
                 dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { showForgotPasswordDialog = false; recoveredInfo = null; forgotIdentifier = "" }) {
                         Text("Batal")
+                    }
+                }
+            )
+        }
+
+        if (registeredUser != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Pendaftaran & Verifikasi Akun", fontWeight = FontWeight.Bold, color = PrimaryBlue) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Akun Google (${registeredUser?.email}) berhasil diverifikasi! Silakan konfirmasi atau sesuaikan ID Login & Password unik Anda untuk keamanan akun dan backup data cloud yang terisolasi:",
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = editableCustomId,
+                            onValueChange = { editableCustomId = it },
+                            label = { Text("Custom Login ID") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = editableCustomPassword,
+                            onValueChange = { editableCustomPassword = it },
+                            label = { Text("Custom Password") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "Data servis Anda akan otomatis tersimpan dan terisolasi khusus di cloud untuk akun Google ini.",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val user = registeredUser!!
+                            val prefs = context.getSharedPreferences("se_smart_cell_auth_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("key_custom_user_id", editableCustomId)
+                                .putString("key_custom_password", editableCustomPassword)
+                                .apply()
+
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                try {
+                                    Firebase.firestore
+                                        .collection("users")
+                                        .document(user.uid)
+                                        .update(
+                                            mapOf(
+                                                "customUserId" to editableCustomId,
+                                                "customPassword" to editableCustomPassword
+                                            )
+                                        )
+                                } catch (e: Exception) {
+                                    // ignore
+                                }
+                            }
+
+                            Toast.makeText(context, "Akun Berhasil Didaftarkan & Terverifikasi!", Toast.LENGTH_SHORT).show()
+                            registeredUser = null
+                            onAuthSuccess()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) {
+                        Text("Konfirmasi & Masuk")
                     }
                 }
             )

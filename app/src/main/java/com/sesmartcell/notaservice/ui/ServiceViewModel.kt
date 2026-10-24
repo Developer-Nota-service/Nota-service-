@@ -54,6 +54,24 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     val selectedStatusFilter = MutableStateFlow("Semua")
     val selectedDeviceFilter = MutableStateFlow("Semua")
 
+    fun signInWithGoogle(
+        context: android.content.Context,
+        onSuccess: (com.sesmartcell.notaservice.auth.AppUser) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val result = com.sesmartcell.notaservice.auth.AuthManager.signInWithGoogle(context)
+                result.fold(
+                    onSuccess = { user -> onSuccess(user) },
+                    onFailure = { e -> onError(e.localizedMessage ?: "Terjadi kesalahan saat masuk") }
+                )
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Terjadi kesalahan")
+            }
+        }
+    }
+
     // Filtered notes reactive flow
     val filteredNotes: StateFlow<List<ServiceNoteEntity>> = combine(
         allNotes,

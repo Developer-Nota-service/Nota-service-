@@ -196,8 +196,9 @@ object AuthManager {
         scope.launch(Dispatchers.IO) {
             try {
                 credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                com.sesmartcell.notaservice.data.database.AppDatabase.getInstance(context).clearAllTables()
             } catch (e: Exception) {
-                Log.e("Auth", "Gagal clear credential state", e)
+                Log.e("Auth", "Gagal clear credential state or DB", e)
             } finally {
                 withContext(Dispatchers.Main) {
                     onComplete()

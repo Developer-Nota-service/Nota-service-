@@ -116,6 +116,7 @@ fun AppRoot(viewModel: ServiceViewModel) {
 
     if (currentUser == null) {
         AuthScreen(
+            viewModel = viewModel,
             onAuthSuccess = {
                 currentUser = AuthManager.getAppUser(context)
             }
