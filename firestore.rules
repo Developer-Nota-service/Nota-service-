@@ -1,112 +1,78 @@
-// Seed user data for Firestore.
-// Usage:
-// 1) npm install firebase-admin
-// 2) set GOOGLE_APPLICATION_CREDENTIALS to your Firebase service account JSON
-// 3) node scripts/seed_users.js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-const admin = require('firebase-admin');
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
-});
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
 
-const db = admin.firestore();
+    function isValidString(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
 
-async function seedUsers() {
-  const users = [
-    {
-      uid: 'REPLACE_WITH_REAL_FIREBASE_UID',
-      email: 'owner@se-smart-cell.com',
-      displayName: 'Owner SE Smart Cell',
-      customUserId: 'USER_100001',
-      customPassword: 'PASS_123456',
-      loginMethod: 'GOOGLE',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  ];
+    function isValidUserDoc(data) {
+      return data.uid == request.auth.uid &&
+        isValidString(data.displayName, 2, 200) &&
+        isValidString(data.email, 3, 200) &&
+        isValidString(data.customUserId, 3, 100) &&
+        isValidString(data.customPassword, 6, 200) &&
+        data.loginMethod is string;
+    }
 
-  for (const user of users) {
-    const userRef = db.collection('users').doc(user.uid);
+    function isValidServiceNote(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.noteNumber, 1, 100) &&
+        isValidString(data.customerName, 1, 200) &&
+        isValidString(data.customerPhone, 7, 50) &&
+        isValidString(data.deviceType, 1, 100) &&
+        isValidString(data.brand, 1, 100) &&
+        isValidString(data.model, 1, 120) &&
+        isValidString(data.issueDescription, 1, 2000) &&
+        isValidString(data.serviceStatus, 1, 100);
+    }
 
-    await userRef.set(
-      {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        customUserId: user.customUserId,
-        customPassword: user.customPassword,
-        loginMethod: user.loginMethod,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-      { merge: true }
-    );
+    function isValidPaymentRecord(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.noteNumber, 1, 100) &&
+        data.amount is number && data.amount >= 0 &&
+        isValidString(data.paymentMethod, 1, 50);
+    }
 
-    await userRef.collection('store_settings').doc('default').set(
-      {
-        userId: user.uid,
-        storeName: 'SE SMART CELL',
-        storeTagline: 'Servis HP & Laptop Cepat & Terpercaya',
-        storeAddress: 'Alamat toko Anda',
-        storePhone: '081234567890',
-        qrisMerchantName: 'SE SMART CELL',
-        bankAccounts: 'BCA: 1234567890 a/n Owner',
-        ewalletAccounts: 'DANA: 081234567890 a/n Owner',
-        warrantyTerms: 'Garansi sesuai kebijakan toko.',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    function isValidStoreSettings(data, userId) {
+      return data.userId == userId &&
+        isValidString(data.storeName, 1, 200) &&
+        data.storePhone is string;
+    }
 
-    await userRef.collection('service_notes').doc('demo-note-001').set({
-      userId: user.uid,
-      noteNumber: 'SSC-001',
-      entryDate: Date.now(),
-      customerName: 'Customer Demo',
-      customerPhone: '081122334455',
-      deviceType: 'HP',
-      brand: 'Samsung',
-      model: 'A15',
-      imeiOrSerial: '1234567890',
-      accessories: 'Dus, kabel, casing',
-      issueDescription: 'Layar tidak responsif',
-      technicianCheckResult: 'LCD perlu diganti',
-      repairAction: 'Ganti LCD',
-      serviceFee: 150000,
-      sparepartFee: 350000,
-      discount: 0,
-      downPayment: 0,
-      estimatedCompletionDate: '2026-01-15',
-      technicianName: 'Teknisi 1',
-      serviceStatus: 'Sedang Dikerjakan',
-      warrantyPeriod: '30 hari',
-      warrantyEndDate: '2026-02-14',
-      initialPaymentMethod: 'Tunai',
-      notes: 'Demo data untuk testing Firestore.',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create, update: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow delete: if isOwner(userId);
 
-    await userRef.collection('payment_records').doc('demo-payment-001').set({
-      userId: user.uid,
-      noteNumber: 'SSC-001',
-      amount: 150000,
-      paymentMethod: 'Tunai',
-      referenceNumber: 'DEMO-001',
-      paymentDate: Date.now(),
-      paymentType: 'DP',
-      isVerified: true,
-      notes: 'Demo pembayaran',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      match /service_notes/{noteId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidServiceNote(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidServiceNote(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /payment_records/{paymentId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPaymentRecord(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidPaymentRecord(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /store_settings/{settingId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidStoreSettings(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+    }
   }
-
-  console.log('Seed completed.');
 }
-
-seedUsers().catch((error) => {
-  console.error('Seed failed:', error);
-  process.exit(1);
-});
-
