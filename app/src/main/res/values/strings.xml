@@ -2,5 +2,8 @@
     <string name="app_name">Nota Service</string>
     <string name="default_web_client_id" translatable="false">641783365971-v9es6hdsqbtec99g3a5tl0o4gvm4qhns.apps.googleusercontent.com</string>
     <string name="firestore_database_id" translatable="false">ai-studio-android-notaserv-2f0d895d-4355-40f8-9d94-2ffcd7cf39d7</string>
+    <!-- Nomor WhatsApp (format 62xxx) untuk tombol "Bantuan via WhatsApp"
+         di halaman Lupa Sandi. Kosong = tombol menampilkan pesan bantuan. -->
+    <string name="support_whatsapp_number" translatable="false"></string>
 </resources>
 

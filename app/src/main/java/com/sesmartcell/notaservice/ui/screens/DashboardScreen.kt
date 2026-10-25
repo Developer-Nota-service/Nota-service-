@@ -36,7 +36,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -153,7 +152,7 @@ fun DashboardScreen(
                             value = "${stats.notesToday}",
                             subtitle = "Total: ${stats.totalNotes} unit",
                             icon = Icons.Default.Description,
-                            gradientColors = listOf(Color(0xFF1E3A8A), Color(0xFF2563EB)),
+                            accentColor = PrimaryBlueLight,
                             modifier = Modifier.weight(1f)
                         )
                         MetricCard(
@@ -161,7 +160,7 @@ fun DashboardScreen(
                             value = "${stats.inProgressCount}",
                             subtitle = "Antrean: ${stats.waitingCount}",
                             icon = Icons.Default.Build,
-                            gradientColors = listOf(Color(0xFFD97706), Color(0xFFF59E0B)),
+                            accentColor = Color(0xFFF59E0B),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -177,7 +176,7 @@ fun DashboardScreen(
                             value = "${stats.completedCount}",
                             subtitle = "Siap diambil",
                             icon = Icons.Default.CheckCircle,
-                            gradientColors = listOf(Color(0xFF065F46), Color(0xFF10B981)),
+                            accentColor = Color(0xFF10B981),
                             modifier = Modifier.weight(1f)
                         )
                         MetricCard(
@@ -185,7 +184,7 @@ fun DashboardScreen(
                             value = FormatUtils.formatRupiah(stats.revenueToday),
                             subtitle = "Bulan Ini: ${FormatUtils.formatRupiah(stats.revenueMonth)}",
                             icon = Icons.Default.MonetizationOn,
-                            gradientColors = listOf(Color(0xFF4338CA), Color(0xFF6366F1)),
+                            accentColor = Color(0xFF22D3EE),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -413,55 +412,58 @@ fun MetricCard(
     value: String,
     subtitle: String,
     icon: ImageVector,
-    gradientColors: List<Color>,
+    accentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    ElevatedCard(
+    Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.linearGradient(gradientColors))
-                .padding(14.dp)
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = title,
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontWeight = FontWeight.Medium
-                    )
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
+                        tint = accentColor,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = value,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.85f)
-                )
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = value,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
