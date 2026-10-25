@@ -592,6 +592,40 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // Footer informasi developer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0xFFCBD5E1))
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Nota Service v1.0",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Dikembangkan oleh @muhammadyusufrifaldi.dev",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "© 2026 Nota Service. All rights reserved.",
+                    fontSize = 10.sp,
+                    color = Color(0xFF94A3B8)
+                )
+            }
         }
 
         if (showSuccessDialog) {
