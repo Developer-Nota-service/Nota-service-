@@ -7,6 +7,6 @@
     <string name="support_whatsapp_number" translatable="false">6281346043318</string>
     <!-- Site key reCAPTCHA Enterprise (Firebase console -> App Check ->
          Apps -> Register app). Kosong = App Check nonaktif di build rilis. -->
-    <string name="appcheck_recaptcha_site_key" translatable="false"></string>
+    <string name="appcheck_recaptcha_site_key" translatable="false">6Ldk2_8tAAAAAG7AEUBZKq16qT30hbzG-MoyTV9A</string>
 </resources>
 
