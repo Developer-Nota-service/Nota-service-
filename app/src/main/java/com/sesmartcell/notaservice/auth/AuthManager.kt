@@ -365,7 +365,20 @@ object AuthManager {
             )
 
         if (account.passwordHash.isBlank() || hashPassword(pass) != account.passwordHash) {
-            return Result.failure(IllegalArgumentException("Password salah. Silakan coba lagi."))
+            // Hash lokal tidak cocok — mungkin sandi baru saja diubah lewat email
+            // reset. Verifikasi ke Firebase Auth (butuh online); jika cocok,
+            // perbarui hash lokal agar login offline berikutnya tetap jalan.
+            val verifiedByFirebase = try {
+                auth.signInWithEmailAndPassword(account.email, pass).await()
+                true
+            } catch (e: Exception) {
+                Log.w("AuthManager", "Verifikasi Firebase email/password gagal: ${e.message}")
+                false
+            }
+            if (!verifiedByFirebase) {
+                return Result.failure(IllegalArgumentException("Password salah. Silakan coba lagi."))
+            }
+            saveRegisteredAccount(context, account.uid, account.customUserId, hashPassword(pass), account.displayName, account.email)
         }
 
         // Login Firebase email/password (best effort) supaya sinkron cloud aktif.
@@ -403,6 +416,33 @@ object AuthManager {
             loginMethod = "GOOGLE",
             registrationComplete = true
         )
+    }
+
+    /**
+     * Kirim email reset password (Firebase Auth) ke email Google akun yang
+     * ditemukan — dipakai dialog "Lupa Sandi / User ID" di halaman login.
+     * Setelah user menyetel sandi baru lewat tautan di email, dia login dengan
+     * sandi baru itu; [loginWithCredentials] mengenali sandi baru dari Firebase
+     * dan otomatis memperbarui hash lokal.
+     */
+    suspend fun sendPasswordResetEmail(context: Context, identifier: String): Result<String> {
+        val account = findRegisteredAccount(context, identifier)
+            ?: return Result.failure(IllegalStateException("Akun tidak ditemukan di perangkat ini."))
+        if (account.email.isBlank() || account.email.endsWith("@notaservice.local")) {
+            return Result.failure(
+                IllegalStateException(
+                    "Akun ini tidak punya email Google aktif. Masuk lewat akun Google, " +
+                        "lalu gunakan Reset / Ubah Sandi di Pengaturan."
+                )
+            )
+        }
+        return try {
+            auth.sendPasswordResetEmail(account.email).await()
+            Result.success(account.email)
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Gagal kirim email reset: ${e.message}", e)
+            Result.failure(e)
+        }
     }
 
     // ==== Akun lokal ====
