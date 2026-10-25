@@ -1,7 +1,12 @@
 package com.sesmartcell.notaservice
 
 import android.app.Application
+import android.util.Log
 import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
+import com.sesmartcell.notaservice.R
 import com.sesmartcell.notaservice.data.database.AppDatabase
 import com.sesmartcell.notaservice.util.StorageCleanup
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +19,35 @@ class App : Application() {
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 FirebaseApp.initializeApp(this)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Aktivasi Firebase App Check: melindungi Auth & Firestore dari
+        // permintaan di luar aplikasi ini.
+        //  - build debug  -> debug provider (token dicetak ke logcat;
+        //    daftarkan tokennya di Firebase console -> App Check -> Apps ->
+        //    Manage debug tokens),
+        //  - build rilis  -> reCAPTCHA Enterprise. APK ini dibagikan langsung
+        //    tanpa Play Store, jadi Play Integrity tidak bisa dipakai. Site key
+        //    diambil dari string appcheck_recaptcha_site_key (strings.xml);
+        //    selama kosong, App Check nonaktif di build rilis.
+        // Enforcement diaktifkan terpisah di Firebase console -> App Check.
+        try {
+            if (BuildConfig.DEBUG) {
+                FirebaseAppCheck.getInstance()
+                    .installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
+            } else {
+                val siteKey = getString(R.string.appcheck_recaptcha_site_key).trim()
+                if (siteKey.isNotBlank()) {
+                    FirebaseAppCheck.getInstance()
+                        .installAppCheckProviderFactory(
+                            RecaptchaAppCheckProviderFactory.getInstance(siteKey)
+                        )
+                } else {
+                    Log.w("NotaService", "Site key reCAPTCHA kosong - App Check nonaktif di build rilis")
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
