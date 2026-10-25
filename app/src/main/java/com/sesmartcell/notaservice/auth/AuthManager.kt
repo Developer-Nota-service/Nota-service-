@@ -654,6 +654,7 @@ object AuthManager {
         } catch (e: Exception) {
             Log.w("AuthManager", "Gagal menulis nomor WhatsApp ke Firestore", e)
         }
+
         return true
     }
 
