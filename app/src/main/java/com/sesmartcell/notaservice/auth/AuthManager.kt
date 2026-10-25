@@ -591,7 +591,11 @@ object AuthManager {
 
         scope.launch(Dispatchers.IO) {
             try {
-                AppDatabase.deleteDatabaseForUser(context, uid)
+                if (uid != null) {
+                    AppDatabase.deleteDatabaseForUser(context, uid)
+                } else {
+                    Log.w("Auth", "Hapus akun: uid tidak diketahui, database lokal dibiarkan")
+                }
             } catch (e: Exception) {
                 Log.e("Auth", "Gagal menghapus database lokal", e)
             }
