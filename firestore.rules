@@ -19,7 +19,8 @@ service cloud.firestore {
         isValidString(data.displayName, 2, 200) &&
         isValidString(data.email, 3, 200) &&
         isValidString(data.customUserId, 3, 100) &&
-        isValidString(data.customPassword, 6, 200) &&
+        !("customPassword" in data) &&
+        isValidString(data.passwordHash, 20, 500) &&
         data.loginMethod is string;
     }
 
