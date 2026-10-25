@@ -18,10 +18,13 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.firestore
 import com.sesmartcell.notaservice.R
 import com.sesmartcell.notaservice.data.database.AppDatabase
+import com.sesmartcell.notaservice.util.FormatUtils
+import com.sesmartcell.notaservice.util.WhatsAppGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +32,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 data class AppUser(
     val uid: String,
@@ -37,7 +41,9 @@ data class AppUser(
     val displayName: String,
     val email: String?,
     val loginMethod: String,
-    val registrationComplete: Boolean = false
+    val registrationComplete: Boolean = false,
+    /** Nomor WhatsApp terdaftar — dipakai pemulihan sandi otomatis. */
+    val whatsapp: String = ""
 )
 
 /**
@@ -66,6 +72,7 @@ object AuthManager {
     private const val KEY_CUSTOM_PASSWORD = "key_custom_password"
     private const val KEY_NAME = "key_user_name"
     private const val KEY_EMAIL = "key_user_email"
+    private const val KEY_WHATSAPP = "key_user_whatsapp"
 
     val auth: FirebaseAuth
         get() = Firebase.auth
@@ -144,6 +151,7 @@ object AuthManager {
             customPassword = prefs.getString(KEY_CUSTOM_PASSWORD, "") ?: "",
             displayName = prefs.getString(KEY_NAME, "Operator Toko") ?: "Operator Toko",
             email = prefs.getString(KEY_EMAIL, ""),
+            whatsapp = prefs.getString(KEY_WHATSAPP, ""),
             loginMethod = "GOOGLE",
             registrationComplete = true
         )
@@ -217,8 +225,9 @@ object AuthManager {
                 val storedHash = snapshot.getString("passwordHash") ?: ""
                 val storedName = snapshot.getString("displayName") ?: displayName
                 val storedEmail = snapshot.getString("email") ?: email
+                val storedWhatsapp = snapshot.getString("whatsapp") ?: ""
 
-                saveRegisteredAccount(context, uid, customUserId, storedHash, storedName, storedEmail)
+                saveRegisteredAccount(context, uid, customUserId, storedHash, storedName, storedEmail, storedWhatsapp)
 
                 sessionPrefs(context).edit()
                     .putBoolean(KEY_LOGGED_IN, true)
@@ -228,6 +237,7 @@ object AuthManager {
                     .putString(KEY_CUSTOM_PASSWORD, "")
                     .putString(KEY_NAME, storedName)
                     .putString(KEY_EMAIL, storedEmail)
+                    .putString(KEY_WHATSAPP, storedWhatsapp)
                     .apply()
 
                 Result.success(AppUser(uid, customUserId, "", storedName, storedEmail, "GOOGLE", true))
@@ -256,7 +266,8 @@ object AuthManager {
         context: Context,
         googleUser: AppUser,
         customUserId: String,
-        customPassword: String
+        customPassword: String,
+        whatsapp: String
     ): Result<AppUser> {
         val id = customUserId.trim()
         val pass = customPassword.trim()
@@ -269,6 +280,10 @@ object AuthManager {
         }
         if (pass.length < 6) {
             return Result.failure(IllegalArgumentException("Password minimal 6 karakter."))
+        }
+        val wa = FormatUtils.sanitizePhone(whatsapp)
+        if (wa.length < 9) {
+            return Result.failure(IllegalArgumentException("Nomor WhatsApp tidak valid. Contoh: 081234567890"))
         }
 
         val uid = googleUser.uid
@@ -296,6 +311,7 @@ object AuthManager {
                         "passwordHash" to passHash,
                         "displayName" to displayName,
                         "email" to email,
+                        "whatsapp" to wa,
                         "loginMethod" to "GOOGLE",
                         "registrationComplete" to true,
                         "createdAt" to FieldValue.serverTimestamp(),
@@ -321,7 +337,7 @@ object AuthManager {
             Log.w("AuthManager", "Link email/password error", e)
         }
 
-        saveRegisteredAccount(context, uid, id, passHash, displayName, email)
+        saveRegisteredAccount(context, uid, id, passHash, displayName, email, wa)
 
         sessionPrefs(context).edit()
             .putBoolean(KEY_LOGGED_IN, true)
@@ -331,9 +347,10 @@ object AuthManager {
             .putString(KEY_CUSTOM_PASSWORD, "")
             .putString(KEY_NAME, displayName)
             .putString(KEY_EMAIL, email)
+            .putString(KEY_WHATSAPP, wa)
             .apply()
 
-        return Result.success(AppUser(uid, id, "", displayName, email, "GOOGLE", true))
+        return Result.success(AppUser(uid, id, "", displayName, email, "GOOGLE", true, wa))
     }
 
     // ==== Langkah 3: login dengan ID & Password ====
@@ -378,7 +395,7 @@ object AuthManager {
             if (!verifiedByFirebase) {
                 return Result.failure(IllegalArgumentException("Password salah. Silakan coba lagi."))
             }
-            saveRegisteredAccount(context, account.uid, account.customUserId, hashPassword(pass), account.displayName, account.email)
+            saveRegisteredAccount(context, account.uid, account.customUserId, hashPassword(pass), account.displayName, account.email, account.whatsapp)
         }
 
         // Login Firebase email/password (best effort) supaya sinkron cloud aktif.
@@ -396,10 +413,11 @@ object AuthManager {
             .putString(KEY_CUSTOM_PASSWORD, "")
             .putString(KEY_NAME, account.displayName)
             .putString(KEY_EMAIL, account.email)
+            .putString(KEY_WHATSAPP, account.whatsapp)
             .apply()
 
         return Result.success(
-            AppUser(account.uid, account.customUserId, "", account.displayName, account.email, "GOOGLE", true)
+            AppUser(account.uid, account.customUserId, "", account.displayName, account.email, "GOOGLE", true, account.whatsapp)
         )
     }
 
@@ -413,36 +431,79 @@ object AuthManager {
             customPassword = "",
             displayName = account.displayName,
             email = account.email,
+            whatsapp = account.whatsapp,
             loginMethod = "GOOGLE",
             registrationComplete = true
         )
     }
 
     /**
-     * Kirim email reset password (Firebase Auth) ke email Google akun yang
-     * ditemukan — dipakai dialog "Lupa Sandi / User ID" di halaman login.
-     * Setelah user menyetel sandi baru lewat tautan di email, dia login dengan
-     * sandi baru itu; [loginWithCredentials] mengenali sandi baru dari Firebase
-     * dan otomatis memperbarui hash lokal.
+     * Pemulihan sandi via WhatsApp: cari akun di perangkat ini lewat nomor
+     * WhatsApp terdaftar, buat sandi acak baru, kirim otomatis lewat gateway
+     * WhatsApp, lalu simpan hash sandi baru di penyimpanan lokal. Setelah itu
+     * pengguna login dengan sandi baru dan mengubahnya sendiri lewat
+     * Pengaturan (lihat [updateCustomPassword]).
      */
-    suspend fun sendPasswordResetEmail(context: Context, identifier: String): Result<String> {
-        val account = findRegisteredAccount(context, identifier)
-            ?: return Result.failure(IllegalStateException("Akun tidak ditemukan di perangkat ini."))
-        if (account.email.isBlank() || account.email.endsWith("@notaservice.local")) {
-            return Result.failure(
+    suspend fun resetPasswordViaWhatsApp(context: Context, rawWhatsapp: String): Result<String> {
+        val wa = FormatUtils.sanitizePhone(rawWhatsapp.trim())
+        if (wa.length < 9) {
+            return Result.failure(IllegalStateException("Nomor WhatsApp tidak valid."))
+        }
+        val account = findRegisteredAccount(context, wa)
+            ?: return Result.failure(
                 IllegalStateException(
-                    "Akun ini tidak punya email Google aktif. Masuk lewat akun Google, " +
-                        "lalu gunakan Reset / Ubah Sandi di Pengaturan."
+                    "Nomor WhatsApp \"$rawWhatsapp\" belum terdaftar di perangkat ini. " +
+                        "Gunakan nomor yang didaftarkan saat membuat akun."
                 )
             )
+        val newPassword = generateResetPassword()
+        val sendResult = WhatsAppGateway.sendText(wa, createResetMessage(account, newPassword))
+        if (sendResult.isFailure) {
+            return Result.failure(
+                sendResult.exceptionOrNull() ?: IllegalStateException("Gagal mengirim WhatsApp.")
+            )
         }
-        return try {
-            auth.sendPasswordResetEmail(account.email).await()
-            Result.success(account.email)
+
+        // Sandi terkirim — perbarui hash di penyimpanan lokal (login offline).
+        saveRegisteredAccount(
+            context, account.uid, account.customUserId,
+            hashPassword(newPassword), account.displayName, account.email, wa
+        )
+        // Best effort: sinkron ke Firestore (rule bisa menolak saat belum
+        // login; akan tersinkron penuh saat sandi diubah lewat Pengaturan).
+        try {
+            db.collection("users").document(account.uid)
+                .set(
+                    mapOf(
+                        "passwordHash" to hashPassword(newPassword),
+                        "whatsapp" to wa,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    ),
+                    SetOptions.merge()
+                )
+                .addOnFailureListener { Log.w("AuthManager", "Sinkron sandi reset ke Firestore dilewati: ${it.message}") }
         } catch (e: Exception) {
-            Log.e("AuthManager", "Gagal kirim email reset: ${e.message}", e)
-            Result.failure(e)
+            Log.w("AuthManager", "Gagal menulis sandi reset ke Firestore", e)
         }
+        return Result.success(account.customUserId)
+    }
+
+    /** Sandi acak 8 karakter (tanpa karakter yang mudah tertukar) untuk reset. */
+    private fun generateResetPassword(): String {
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+        val random = SecureRandom()
+        return (1..8).map { chars[random.nextInt(chars.length)] }.joinToString("")
+    }
+
+    private fun createResetMessage(account: LocalAccount, newPassword: String): String {
+        return "🔑 *SE SMART CELL — Sandi Baru*\n" +
+            "Halo *${account.displayName}*, permintaan pemulihan sandi untuk akun *${account.customUserId}* telah diproses.\n\n" +
+            "Sandi baru Anda: *$newPassword*\n\n" +
+            "Langkah selanjutnya:\n" +
+            "1. Buka aplikasi SE SMART CELL\n" +
+            "2. Masuk dengan ID Login *${account.customUserId}* dan sandi baru di atas\n" +
+            "3. Buka Pengaturan → Reset / Ubah Sandi Cadangan untuk mengganti sandi sesuai keinginan\n\n" +
+            "_Jangan bagikan sandi ini kepada siapa pun._"
     }
 
     // ==== Akun lokal ====
@@ -452,7 +513,8 @@ object AuthManager {
         val customUserId: String,
         val passwordHash: String,
         val displayName: String,
-        val email: String
+        val email: String,
+        val whatsapp: String
     )
 
     private fun saveRegisteredAccount(
@@ -461,13 +523,15 @@ object AuthManager {
         customUserId: String,
         passwordHash: String,
         displayName: String,
-        email: String
+        email: String,
+        whatsapp: String
     ) {
         val entry = JSONObject().apply {
             put("customUserId", customUserId)
             put("passwordHash", passwordHash)
             put("displayName", displayName)
             put("email", email)
+            put("whatsapp", whatsapp)
         }
         accountsStore(context).edit().putString(accountKey(uid), entry.toString()).apply()
     }
@@ -482,13 +546,21 @@ object AuthManager {
                 val obj = JSONObject(raw.toString())
                 val id = obj.optString("customUserId")
                 val email = obj.optString("email")
-                if (id.equals(target, ignoreCase = true) || email.equals(target, ignoreCase = true)) {
+                val wa = obj.optString("whatsapp")
+                val matchByIdOrEmail = id.equals(target, ignoreCase = true) || email.equals(target, ignoreCase = true)
+                // Pencarian lewat nomor WhatsApp: hanya jika input memang nomor
+                // (min. 9 digit) dan cocok dengan nomor terdaftar.
+                val targetDigits = FormatUtils.sanitizePhone(target)
+                val matchByWhatsapp = targetDigits.length >= 9 &&
+                    targetDigits == FormatUtils.sanitizePhone(wa)
+                if (matchByIdOrEmail || matchByWhatsapp) {
                     return LocalAccount(
                         uid = key.removePrefix("acct_"),
                         customUserId = id,
                         passwordHash = obj.optString("passwordHash"),
                         displayName = obj.optString("displayName").ifBlank { "Operator Toko" },
-                        email = email.ifBlank { fallbackEmail(key.removePrefix("acct_")) }
+                        email = email.ifBlank { fallbackEmail(key.removePrefix("acct_")) },
+                        whatsapp = wa
                     )
                 }
             } catch (_: Exception) {
@@ -514,9 +586,10 @@ object AuthManager {
         val customUserId = prefs.getString(KEY_CUSTOM_USER_ID, "") ?: ""
         val displayName = prefs.getString(KEY_NAME, "Pemilik Toko") ?: "Pemilik Toko"
         val email = prefs.getString(KEY_EMAIL, "")?.ifBlank { fallbackEmail(uid) } ?: fallbackEmail(uid)
+        val whatsapp = prefs.getString(KEY_WHATSAPP, "") ?: ""
         val newHash = hashPassword(trimmed)
 
-        saveRegisteredAccount(context, uid, customUserId, newHash, displayName, email)
+        saveRegisteredAccount(context, uid, customUserId, newHash, displayName, email, whatsapp)
 
         try {
             db.collection("users").document(uid)
@@ -527,6 +600,7 @@ object AuthManager {
                         "passwordHash" to newHash,
                         "displayName" to displayName,
                         "email" to email,
+                        "whatsapp" to whatsapp,
                         "loginMethod" to "GOOGLE",
                         "registrationComplete" to true,
                         "createdAt" to FieldValue.serverTimestamp(),
@@ -545,6 +619,41 @@ object AuthManager {
         } catch (_: Exception) {
         }
 
+        return true
+    }
+
+    /**
+     * Simpan/ubah No. WhatsApp pemulihan untuk akun ini (dipakai alur Lupa
+     * Sandi). Memperbarui penyimpanan akun lokal, prefs sesi, dan Firestore
+     * (best effort).
+     */
+    fun updateAccountWhatsApp(context: Context, rawWhatsapp: String): Boolean {
+        val wa = FormatUtils.sanitizePhone(rawWhatsapp.trim())
+        if (wa.length < 9) return false
+
+        val prefs = sessionPrefs(context)
+        val uid = prefs.getString(KEY_UID, null) ?: currentUser?.uid ?: return false
+        val customUserId = prefs.getString(KEY_CUSTOM_USER_ID, "") ?: ""
+
+        val account = findRegisteredAccount(context, customUserId)
+        if (account != null) {
+            saveRegisteredAccount(
+                context, account.uid, account.customUserId, account.passwordHash,
+                account.displayName, account.email, wa
+            )
+        }
+        prefs.edit().putString(KEY_WHATSAPP, wa).apply()
+
+        try {
+            db.collection("users").document(uid)
+                .set(
+                    mapOf("whatsapp" to wa, "updatedAt" to FieldValue.serverTimestamp()),
+                    SetOptions.merge()
+                )
+                .addOnFailureListener { Log.w("AuthManager", "Sinkron nomor WhatsApp ke Firestore dilewati: ${it.message}") }
+        } catch (e: Exception) {
+            Log.w("AuthManager", "Gagal menulis nomor WhatsApp ke Firestore", e)
+        }
         return true
     }
 

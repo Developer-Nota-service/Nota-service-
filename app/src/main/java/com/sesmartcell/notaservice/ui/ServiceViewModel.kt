@@ -101,10 +101,11 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         googleUser: AppUser,
         customUserId: String,
         customPassword: String,
+        whatsapp: String,
         onResult: (Result<AppUser>) -> Unit
     ) {
         viewModelScope.launch {
-            val result = AuthManager.completeRegistration(context, googleUser, customUserId, customPassword)
+            val result = AuthManager.completeRegistration(context, googleUser, customUserId, customPassword, whatsapp)
             if (result.isSuccess) {
                 // Akun baru mulai dari nol: buang repository cache uid ini agar
                 // aliran data mengambil database baru yang sudah bersih.
@@ -114,10 +115,10 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Kirim email reset password (Firebase) untuk akun yang ditemukan. */
-    fun sendPasswordResetEmail(identifier: String, onResult: (Result<String>) -> Unit) {
+    /** Kirim sandi baru ke nomor WhatsApp terdaftar (alur lupa sandi). */
+    fun resetPasswordViaWhatsApp(whatsapp: String, onResult: (Result<String>) -> Unit) {
         viewModelScope.launch {
-            onResult(AuthManager.sendPasswordResetEmail(appContext, identifier))
+            onResult(AuthManager.resetPasswordViaWhatsApp(appContext, whatsapp))
         }
     }
 

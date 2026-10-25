@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
@@ -47,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +62,7 @@ import com.sesmartcell.notaservice.ui.ServiceViewModel
 import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlueLight
+import com.sesmartcell.notaservice.util.FormatUtils
 
 /**
  * Layar autentikasi dengan alur WAJIB berurutan:
@@ -86,12 +90,14 @@ fun AuthScreen(
     var regId by remember { mutableStateOf("") }
     var regPassword by remember { mutableStateOf("") }
     var regPasswordConfirm by remember { mutableStateOf("") }
+    var regWhatsapp by remember { mutableStateOf("") }
     var showRegPassword by remember { mutableStateOf(false) }
     var regError by remember { mutableStateOf<String?>(null) }
 
     var showForgotDialog by remember { mutableStateOf(false) }
-    var forgotIdentifier by remember { mutableStateOf("") }
-    var recoveredInfo by remember { mutableStateOf<String?>(null) }
+    var forgotWhatsapp by remember { mutableStateOf("") }
+    var forgotAccount by remember { mutableStateOf<AppUser?>(null) }
+    var forgotSent by remember { mutableStateOf(false) }
     var isSendingReset by remember { mutableStateOf(false) }
 
     Box(
@@ -320,6 +326,7 @@ fun AuthScreen(
                                             regId = ""
                                             regPassword = ""
                                             regPasswordConfirm = ""
+                                            regWhatsapp = ""
                                             regError = null
                                             googleUser = user
                                             Toast.makeText(
@@ -387,7 +394,7 @@ fun AuthScreen(
                     .pressClickScale()
                     .testTag("forgot_password_button")
             ) {
-                Text("Lupa Sandi / User ID? Verifikasi Akun", color = PrimaryBlueLight, fontSize = 12.sp)
+                Text("Lupa Sandi? Dapatkan Sandi Baru via WhatsApp", color = PrimaryBlueLight, fontSize = 12.sp)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -449,6 +456,16 @@ fun AuthScreen(
                             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = regWhatsapp,
+                            onValueChange = { regWhatsapp = it },
+                            label = { Text("No. WhatsApp (mis. 0812...)") },
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         if (regError != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
@@ -460,7 +477,7 @@ fun AuthScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            "Kredensial ini tersimpan di akun Firebase Anda (password di-hash) dan dipakai untuk login selanjutnya.",
+                            "Kredensial ini tersimpan di akun Firebase Anda (password di-hash) dan dipakai untuk login selanjutnya. Nomor WhatsApp dipakai untuk mengirim sandi baru otomatis saat lupa sandi.",
                             fontSize = 11.sp,
                             color = Color.Gray
                         )
@@ -487,8 +504,12 @@ fun AuthScreen(
                                 regError = "Konfirmasi password tidak sama."
                                 return@Button
                             }
+                            if (FormatUtils.sanitizePhone(regWhatsapp.trim()).length < 9) {
+                                regError = "Nomor WhatsApp tidak valid (contoh: 081234567890)."
+                                return@Button
+                            }
                             regError = null
-                            viewModel.completeRegistration(context, user, id, regPassword) { result ->
+                            viewModel.completeRegistration(context, user, id, regPassword, regWhatsapp.trim()) { result ->
                                 result.fold(
                                     onSuccess = {
                                         Toast.makeText(
@@ -522,49 +543,94 @@ fun AuthScreen(
             )
         }
 
-        // ==== Dialog lupa sandi / user ID ====
+        // ==== Dialog lupa sandi via WhatsApp (3 langkah) ====
         if (showForgotDialog) {
+            val waMasked = maskWhatsapp(forgotAccount?.whatsapp ?: forgotWhatsapp)
             AlertDialog(
-                onDismissRequest = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
-                title = { Text("Pemulihan Sandi & User ID", fontWeight = FontWeight.Bold) },
+                onDismissRequest = {
+                    showForgotDialog = false
+                    forgotAccount = null; forgotWhatsapp = ""; forgotSent = false
+                },
+                title = { Text("Pemulihan Sandi via WhatsApp", fontWeight = FontWeight.Bold, color = PrimaryBlue) },
                 text = {
                     Column {
-                        if (recoveredInfo == null) {
-                            Text("Masukkan Email Google atau ID Login terdaftar untuk memverifikasi akun Anda:", fontSize = 13.sp)
-                            Spacer(modifier = Modifier.height(10.dp))
+                        if (forgotAccount == null) {
+                            // Langkah 1: masukkan nomor WhatsApp terdaftar.
+                            Text(
+                                "Lupa sandi? Tidak perlu email — cukup nomor WhatsApp yang Anda daftarkan.",
+                                fontSize = 13.sp,
+                                color = Color.DarkGray
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
                             OutlinedTextField(
-                                value = forgotIdentifier,
-                                onValueChange = { forgotIdentifier = it },
-                                label = { Text("Email / ID Login") },
+                                value = forgotWhatsapp,
+                                onValueChange = { forgotWhatsapp = it },
+                                label = { Text("No. WhatsApp Terdaftar") },
+                                placeholder = { Text("mis. 081234567890") },
                                 singleLine = true,
+                                leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 modifier = Modifier.fillMaxWidth()
                             )
-                        } else {
-                            Text("Data Akun Ditemukan:", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(recoveredInfo ?: "", fontSize = 13.sp)
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                "Klik \"Kirim Email Reset\" — Firebase akan mengirim tautan ganti sandi ke email Google Anda.",
-                                fontSize = 12.sp,
+                                "Hanya nomor yang terdaftar pada akun di perangkat ini yang dikenali.",
+                                fontSize = 11.sp,
                                 color = Color.Gray
+                            )
+                        } else if (!forgotSent) {
+                            // Langkah 2: konfirmasi akun + panduan langkah demi langkah.
+                            Text("Akun Ditemukan", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Nama: ${forgotAccount?.displayName ?: "-"}\n" +
+                                    "User ID: ${forgotAccount?.customUserId ?: "-"}\n" +
+                                    "WhatsApp: $waMasked",
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Cara pemulihan sandi:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "1. Tekan tombol \"Kirim Sandi Baru\" — sandi baru dikirim otomatis ke WhatsApp Anda.\n" +
+                                    "2. Buka aplikasi ini, masuk dengan User ID Anda + sandi baru dari WhatsApp.\n" +
+                                    "3. Untuk keamanan, ganti sandi lewat Pengaturan → Reset / Ubah Sandi Cadangan.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray,
+                                lineHeight = 18.sp
+                            )
+                        } else {
+                            // Langkah 3: sandi terkirim — panduan lanjutan.
+                            Text("Sandi Baru Terkirim! ✓", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Sandi baru sudah dikirim ke WhatsApp $waMasked. Selanjutnya:",
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "1. Buka WhatsApp, salin sandi baru Anda.\n" +
+                                    "2. Masuk ke aplikasi dengan User ID \"${forgotAccount?.customUserId ?: "-"}\" dan sandi baru itu.\n" +
+                                    "3. Ganti sandi sesuai keinginan lewat Pengaturan → Reset / Ubah Sandi Cadangan.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray,
+                                lineHeight = 18.sp
                             )
                         }
                     }
                 },
                 confirmButton = {
-                    if (recoveredInfo == null) {
+                    if (forgotAccount == null) {
                         Button(
                             onClick = {
-                                val account = AuthManager.findLocalAccount(context, forgotIdentifier)
+                                val account = AuthManager.findLocalAccount(context, forgotWhatsapp)
                                 if (account != null) {
-                                    recoveredInfo = "User ID: ${account.customUserId}\n" +
-                                        "Email: ${account.email ?: "-"}"
-                                    Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
+                                    forgotAccount = account
+                                    Toast.makeText(context, "Akun ditemukan!", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(
                                         context,
-                                        "Akun tidak ditemukan di perangkat ini. Silakan daftar via akun Google.",
+                                        "Nomor WhatsApp belum terdaftar di perangkat ini.",
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }
@@ -572,30 +638,28 @@ fun AuthScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                             modifier = Modifier.pressClickScale()
                         ) {
-                            Text("Verifikasi Akun")
+                            Text("Cari Akun")
                         }
-                    } else {
+                    } else if (!forgotSent) {
                         Button(
                             onClick = {
                                 if (isSendingReset) return@Button
                                 isSendingReset = true
-                                viewModel.sendPasswordResetEmail(forgotIdentifier) { result ->
+                                viewModel.resetPasswordViaWhatsApp(forgotWhatsapp) { result ->
                                     isSendingReset = false
                                     result.fold(
-                                        onSuccess = { email ->
+                                        onSuccess = {
+                                            forgotSent = true
                                             Toast.makeText(
                                                 context,
-                                                "Email reset terkirim ke $email. " +
-                                    "PENTING: buka email TERBARU dalam 1 jam — " +
-                                    "tautan lama otomatis hangus dan hanya bisa dipakai sekali.",
+                                                "Sandi baru terkirim ke WhatsApp Anda.",
                                                 Toast.LENGTH_LONG
                                             ).show()
-                                            showForgotDialog = false; recoveredInfo = null; forgotIdentifier = ""
                                         },
                                         onFailure = { error ->
                                             Toast.makeText(
                                                 context,
-                                                "Gagal kirim email reset: ${error.localizedMessage ?: "periksa koneksi internet Anda"}",
+                                                "Gagal: ${error.localizedMessage ?: "periksa koneksi internet Anda"}",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }
@@ -606,19 +670,42 @@ fun AuthScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                             modifier = Modifier.pressClickScale()
                         ) {
-                            Text(if (isSendingReset) "Mengirim..." else "Kirim Email Reset")
+                            Text(if (isSendingReset) "Mengirim..." else "Kirim Sandi Baru")
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                showForgotDialog = false
+                                forgotAccount = null; forgotWhatsapp = ""; forgotSent = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                            modifier = Modifier.pressClickScale()
+                        ) {
+                            Text("Selesai")
                         }
                     }
                 },
                 dismissButton = {
-                    TextButton(
-                        onClick = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
-                        modifier = Modifier.pressClickScale()
-                    ) {
-                        Text("Batal")
+                    if (!forgotSent) {
+                        TextButton(
+                            onClick = {
+                                showForgotDialog = false
+                                forgotAccount = null; forgotWhatsapp = ""; forgotSent = false
+                            },
+                            modifier = Modifier.pressClickScale()
+                        ) {
+                            Text("Batal")
+                        }
                     }
                 }
             )
         }
     }
+}
+
+/** Sembunyikan sebagian nomor WhatsApp: 081234567890 -> 0812••••7890. */
+private fun maskWhatsapp(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    if (digits.length < 8) return if (raw.isBlank()) "-" else raw
+    return digits.take(4) + "••••" + digits.takeLast(4)
 }

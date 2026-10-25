@@ -18,6 +18,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
+        // Token gateway WhatsApp (Fonnte) untuk mengirim sandi baru otomatis
+        // saat "Lupa Sandi". Disuntikkan dari env saat build — tidak pernah
+        // ditulis plaintext di repo. Kosong = fitur kirim WhatsApp nonaktif.
+        buildConfigField(
+            "String",
+            "WHATSAPP_GATEWAY_TOKEN",
+            "\"" + (System.getenv("WHATSAPP_GATEWAY_TOKEN") ?: "") + "\""
+        )
     }
 
     signingConfigs {

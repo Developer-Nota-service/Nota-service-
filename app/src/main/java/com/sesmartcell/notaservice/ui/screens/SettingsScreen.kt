@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -63,6 +64,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,6 +101,7 @@ fun SettingsScreen(
     var showResetPasswordDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var newPasswordInput by remember { mutableStateOf("") }
+    var accountWhatsapp by remember { mutableStateOf(AuthManager.getAppUser(context)?.whatsapp ?: "") }
 
     val qrisPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -265,6 +268,39 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Reset / Ubah Sandi Cadangan", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = accountWhatsapp,
+                        onValueChange = { accountWhatsapp = it },
+                        label = { Text("No. WhatsApp Pemulihan Sandi") },
+                        supportingText = {
+                            Text("Saat lupa sandi, sandi baru dikirim otomatis ke nomor ini.", fontSize = 10.sp)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val saved = AuthManager.updateAccountWhatsApp(context, accountWhatsapp)
+                            if (saved) {
+                                Toast.makeText(context, "Nomor WhatsApp pemulihan tersimpan", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Nomor WhatsApp tidak valid", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pressClickScale(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Simpan No. WhatsApp Pemulihan", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
