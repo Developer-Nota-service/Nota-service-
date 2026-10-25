@@ -585,7 +585,9 @@ fun AuthScreen(
                                         onSuccess = { email ->
                                             Toast.makeText(
                                                 context,
-                                                "Email reset terkirim ke $email — cek inbox Google Anda.",
+                                                "Email reset terkirim ke $email. " +
+                                    "PENTING: buka email TERBARU dalam 1 jam — " +
+                                    "tautan lama otomatis hangus dan hanya bisa dipakai sekali.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                             showForgotDialog = false; recoveredInfo = null; forgotIdentifier = ""
