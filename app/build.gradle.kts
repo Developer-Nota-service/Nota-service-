@@ -21,17 +21,20 @@ android {
     }
 
     signingConfigs {
+        // Password default "android" cocok dengan my-upload-key.jks yang
+        // ter-commit di repo. CI/lokal bisa menimpanya lewat env
+        // KEYSTORE_PASSWORD / KEY_PASSWORD (mis. untuk keystore rahasia).
         create("release") {
             storeFile = file("${rootDir}/my-upload-key.jks")
-            storePassword = "android"
-            keyAlias = "upload"
-            keyPassword = "android"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
         }
         create("debugConfig") {
             storeFile = file("${rootDir}/my-upload-key.jks")
-            storePassword = "android"
-            keyAlias = "upload"
-            keyPassword = "android"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
         }
     }
 
