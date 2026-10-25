@@ -276,6 +276,15 @@ object AuthManager {
         val email = googleUser.email ?: fallbackEmail(uid)
         val passHash = hashPassword(pass)
 
+        // AKUN BARU = DATA BERSIH: hapus database lokal uid ini (jika pernah
+        // ada sisa) sehingga pendaftaran baru selalu mulai dari nol dan tidak
+        // mewarisi data akun lain. Database akun lain tidak disentuh.
+        try {
+            AppDatabase.deleteDatabaseForUser(context, uid)
+        } catch (e: Exception) {
+            Log.w("AuthManager", "Gagal membersihkan database untuk akun baru: ${e.message}")
+        }
+
         try {
             // Dokumen penuh (bukan merge) agar field lama yang melanggar rules
             // (mis. customPassword plaintext) ikut terganti.

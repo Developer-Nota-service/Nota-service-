@@ -1,6 +1,7 @@
 package com.sesmartcell.notaservice.data.database
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -96,6 +97,31 @@ abstract class AppDatabase : RoomDatabase() {
             val existing = DATABASES.remove(databaseName)
             existing?.close()
             return context.deleteDatabase(databaseName)
+        }
+
+        /**
+         * Database warisan dari versi SEBELUM isolasi per akun. Versi lama memakai
+         * satu database bersama ("se_smart_cell.db") dan fallback "guest"
+         * ("se_smart_cell_guest.db") sehingga data antar akun tercampur di sana.
+         * Dihapus sekali di setiap startup agar data lama campuran TIDAK PERNAH
+         * muncul lagi di akun mana pun — database per-akun (se_smart_cell_<uid>.db)
+         * tidak disentuh, jadi data milik akun sebelumnya tetap utuh.
+         */
+        private val LEGACY_SHARED_DATABASES = listOf(
+            "se_smart_cell.db",
+            "se_smart_cell_guest.db"
+        )
+
+        fun purgeLegacySharedDatabases(context: Context) {
+            for (name in LEGACY_SHARED_DATABASES) {
+                try {
+                    val open = DATABASES.remove(name)
+                    open?.close()
+                    context.deleteDatabase(name)
+                } catch (e: Exception) {
+                    Log.w("AppDatabase", "Gagal membersihkan database lama $name: ${e.message}")
+                }
+            }
         }
     }
 }
