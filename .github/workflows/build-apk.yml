@@ -1,8 +1,11 @@
 name: Build Android APK (SE SMART CELL)
 
 on:
+  # main/master on every push, plus the Base44 working branches: GitHub does not
+  # run pull_request workflows while a PR is conflicted/unmergeable, so without
+  # this the APK build would never run for such a branch.
   push:
-    branches: [main, master]
+    branches: [main, master, 'base44/**']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
