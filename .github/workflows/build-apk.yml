@@ -35,54 +35,43 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
-      - name: Prepare local build configuration
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Signing: app/build.gradle.kts signs every variant with <root>/my-upload-key.jks,
+      # which is committed to the repository, so checkout alone makes the APK
+      # signable. A KEYSTORE_BASE64 secret overrides the committed keystore when set.
+      - name: Prepare Firebase config and signing inputs
         shell: bash
         env:
           FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x ./gradlew
 
+          # The secrets Gradle plugin reads .env; fall back to committed defaults.
           if [[ ! -f .env ]]; then
             cp .env.example .env
           fi
 
+          # The google-services plugin expects app/google-services.json. Prefer the
+          # secret when configured, otherwise reuse the config committed in the repo.
           if [[ -n "${FIREBASE_GOOGLE_SERVICES_JSON_B64:-}" ]]; then
             printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+          elif [[ ! -f app/google-services.json && -f 'app/google-services (1).json' ]]; then
+            cp 'app/google-services (1).json' app/google-services.json
           fi
 
-          if [[ ! -f debug.keystore ]]; then
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
+          # Optional: replace the committed upload keystore with the secret one.
+          if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
           fi
-
-          export KEYSTORE_PATH="$GITHUB_WORKSPACE/my-upload-key.jks"
-          export KEYSTORE_PASSWORD="android"
-          export KEY_ALIAS="upload"
-          export KEY_PASSWORD="android"
-
-          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
         run: ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleDebug
 
-      - name: Verify APK was created
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
-
+      # if-no-files-found: error doubles as the "APK was created" check.
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
