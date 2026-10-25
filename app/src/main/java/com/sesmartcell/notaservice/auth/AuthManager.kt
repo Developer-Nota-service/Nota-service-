@@ -150,8 +150,8 @@ object AuthManager {
             customUserId = prefs.getString(KEY_CUSTOM_USER_ID, "") ?: "",
             customPassword = prefs.getString(KEY_CUSTOM_PASSWORD, "") ?: "",
             displayName = prefs.getString(KEY_NAME, "Operator Toko") ?: "Operator Toko",
-            email = prefs.getString(KEY_EMAIL, ""),
-            whatsapp = prefs.getString(KEY_WHATSAPP, ""),
+            email = prefs.getString(KEY_EMAIL, "") ?: "",
+            whatsapp = prefs.getString(KEY_WHATSAPP, "") ?: "",
             loginMethod = "GOOGLE",
             registrationComplete = true
         )
