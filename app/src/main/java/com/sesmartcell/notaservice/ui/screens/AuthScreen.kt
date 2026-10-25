@@ -92,6 +92,7 @@ fun AuthScreen(
     var showForgotDialog by remember { mutableStateOf(false) }
     var forgotIdentifier by remember { mutableStateOf("") }
     var recoveredInfo by remember { mutableStateOf<String?>(null) }
+    var isSendingReset by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -542,6 +543,12 @@ fun AuthScreen(
                             Text("Data Akun Ditemukan:", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(recoveredInfo ?: "", fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                "Klik \"Kirim Email Reset\" — Firebase akan mengirim tautan ganti sandi ke email Google Anda.",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
                         }
                     }
                 },
@@ -552,9 +559,7 @@ fun AuthScreen(
                                 val account = AuthManager.findLocalAccount(context, forgotIdentifier)
                                 if (account != null) {
                                     recoveredInfo = "User ID: ${account.customUserId}\n" +
-                                        "Email: ${account.email ?: "-"}\n\n" +
-                                        "Password tidak dapat ditampilkan. Masuk lewat akun Google di bawah, " +
-                                        "lalu gunakan \"Reset / Ubah Sandi\" di Pengaturan."
+                                        "Email: ${account.email ?: "-"}"
                                     Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(
@@ -571,11 +576,35 @@ fun AuthScreen(
                         }
                     } else {
                         Button(
-                            onClick = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
+                            onClick = {
+                                if (isSendingReset) return@Button
+                                isSendingReset = true
+                                viewModel.sendPasswordResetEmail(forgotIdentifier) { result ->
+                                    isSendingReset = false
+                                    result.fold(
+                                        onSuccess = { email ->
+                                            Toast.makeText(
+                                                context,
+                                                "Email reset terkirim ke $email — cek inbox Google Anda.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            showForgotDialog = false; recoveredInfo = null; forgotIdentifier = ""
+                                        },
+                                        onFailure = { error ->
+                                            Toast.makeText(
+                                                context,
+                                                "Gagal kirim email reset: ${error.localizedMessage ?: "periksa koneksi internet Anda"}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    )
+                                }
+                            },
+                            enabled = !isSendingReset,
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                             modifier = Modifier.pressClickScale()
                         ) {
-                            Text("Tutup")
+                            Text(if (isSendingReset) "Mengirim..." else "Kirim Email Reset")
                         }
                     }
                 },

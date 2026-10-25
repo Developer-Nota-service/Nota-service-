@@ -114,6 +114,13 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Kirim email reset password (Firebase) untuk akun yang ditemukan. */
+    fun sendPasswordResetEmail(identifier: String, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            onResult(AuthManager.sendPasswordResetEmail(appContext, identifier))
+        }
+    }
+
     /** Langkah 3: login dengan ID Login & Password. */
     fun loginWithCredentials(
         context: Context,
