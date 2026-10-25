@@ -46,6 +46,7 @@ jobs:
         env:
           FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x ./gradlew
@@ -68,7 +69,25 @@ jobs:
             printf '%s' "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
           fi
 
+          # Guard: a keystore from KEYSTORE_BASE64 whose password does not match
+          # KEYSTORE_PASSWORD (default "android" from app/build.gradle.kts) would
+          # abort packaging. Validate it; on mismatch fall back to the committed
+          # keystore so CI still produces a signed APK.
+          effective_pass="${KEYSTORE_PASSWORD:-android}"
+          if ! keytool -list -keystore my-upload-key.jks -storepass "$effective_pass" 2>/dev/null | grep -q "^upload,"; then
+            echo "::warning::Keystore tidak cocok dengan password/alias signing — memakai keystore ter-commit di repo."
+            git checkout -- my-upload-key.jks
+            if ! keytool -list -keystore my-upload-key.jks -storepass android 2>/dev/null | grep -q "^upload,"; then
+              echo "::error::Keystore ter-commit juga tidak valid dengan password 'android'."
+              exit 1
+            fi
+          fi
+
       - name: Build debug APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleDebug
 
       # if-no-files-found: error doubles as the "APK was created" check.
