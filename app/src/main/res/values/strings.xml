@@ -5,5 +5,8 @@
     <!-- Nomor WhatsApp (format 62xxx) untuk tombol "Bantuan via WhatsApp"
          di halaman Lupa Sandi. Kosong = tombol menampilkan pesan bantuan. -->
     <string name="support_whatsapp_number" translatable="false">6281346043318</string>
+    <!-- Site key reCAPTCHA Enterprise (Firebase console -> App Check ->
+         Apps -> Register app). Kosong = App Check nonaktif di build rilis. -->
+    <string name="appcheck_recaptcha_site_key" translatable="false"></string>
 </resources>
 
