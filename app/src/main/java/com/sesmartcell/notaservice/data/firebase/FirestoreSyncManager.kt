@@ -9,10 +9,20 @@ import com.sesmartcell.notaservice.auth.AuthManager
 import com.sesmartcell.notaservice.data.entity.PaymentRecordEntity
 import com.sesmartcell.notaservice.data.entity.ServiceNoteEntity
 import com.sesmartcell.notaservice.data.entity.StoreSettingsEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
+/**
+ * Sinkronisasi data per-akun ke Firestore (users/{uid}/service_notes, dst).
+ *
+ * Semua penulisan bersifat fire-and-forget: Firestore menyimpan write di cache
+ * lokal dan mengirimkannya ke server saat online — jadi penyimpanan data TIDAK
+ * PERNAH gagal/diblokir karena perangkat sedang offline. Kegagalan permanen
+ * (mis. aturan rules) dilaporkan lewat [syncErrors] agar pengguna mendapat
+ * notifikasi.
+ */
 class FirestoreSyncManager(private val context: Context) {
 
     private val db: FirebaseFirestore by lazy {
@@ -28,12 +38,28 @@ class FirestoreSyncManager(private val context: Context) {
         }
     }
 
-    private fun getUserId(): String? = AuthManager.currentUser?.uid ?: AuthManager.getAppUser(context)?.uid
+    private val _syncErrors = MutableSharedFlow<String>(
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
-    suspend fun syncNoteToCloud(note: ServiceNoteEntity) = withContext(Dispatchers.IO) {
+    /** Pesan error sinkronisasi terakhir — dikumpulkan ViewModel untuk notifikasi. */
+    val syncErrors: SharedFlow<String> = _syncErrors.asSharedFlow()
+
+    private fun getUserId(): String? =
+        AuthManager.currentUser?.uid ?: AuthManager.getAppUser(context)?.uid
+
+    private fun reportError(operation: String, error: Exception?) {
+        val message = "Sinkron cloud gagal ($operation)" +
+            (error?.message?.let { ": $it" } ?: "")
+        Log.e("FirestoreSync", message, error)
+        _syncErrors.tryEmit(message)
+    }
+
+    fun syncNoteToCloud(note: ServiceNoteEntity) {
         val uid = getUserId() ?: run {
             Log.w("FirestoreSync", "User belum login, sinkronisasi note dibatalkan")
-            return@withContext
+            return
         }
 
         try {
@@ -69,17 +95,18 @@ class FirestoreSyncManager(private val context: Context) {
                 "notes" to note.notes,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            docRef.set(data).await()
-            Log.d("FirestoreSync", "Note ${note.noteNumber} synced to Firestore")
+            docRef.set(data)
+                .addOnSuccessListener { Log.d("FirestoreSync", "Note ${note.noteNumber} synced ke Firestore") }
+                .addOnFailureListener { reportError("nota ${note.noteNumber}", it) }
         } catch (e: Exception) {
-            Log.e("FirestoreSync", "Failed to sync note: ${e.message}", e)
+            reportError("nota ${note.noteNumber}", e)
         }
     }
 
-    suspend fun syncPaymentToCloud(payment: PaymentRecordEntity) = withContext(Dispatchers.IO) {
+    fun syncPaymentToCloud(payment: PaymentRecordEntity) {
         val uid = getUserId() ?: run {
             Log.w("FirestoreSync", "User belum login, sinkronisasi payment dibatalkan")
-            return@withContext
+            return
         }
 
         try {
@@ -100,17 +127,18 @@ class FirestoreSyncManager(private val context: Context) {
                 "notes" to payment.notes,
                 "createdAt" to FieldValue.serverTimestamp()
             )
-            docRef.set(data).await()
-            Log.d("FirestoreSync", "Payment ${payment.id} synced to Firestore")
+            docRef.set(data)
+                .addOnSuccessListener { Log.d("FirestoreSync", "Payment ${payment.id} synced ke Firestore") }
+                .addOnFailureListener { reportError("pembayaran", it) }
         } catch (e: Exception) {
-            Log.e("FirestoreSync", "Failed to sync payment: ${e.message}", e)
+            reportError("pembayaran", e)
         }
     }
 
-    suspend fun syncSettingsToCloud(settings: StoreSettingsEntity) = withContext(Dispatchers.IO) {
+    fun syncSettingsToCloud(settings: StoreSettingsEntity) {
         val uid = getUserId() ?: run {
             Log.w("FirestoreSync", "User belum login, sinkronisasi settings dibatalkan")
-            return@withContext
+            return
         }
 
         try {
@@ -131,17 +159,18 @@ class FirestoreSyncManager(private val context: Context) {
                 "warrantyTerms" to settings.warrantyTerms,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            docRef.set(data).await()
-            Log.d("FirestoreSync", "Store settings synced to Firestore")
+            docRef.set(data)
+                .addOnSuccessListener { Log.d("FirestoreSync", "Store settings synced ke Firestore") }
+                .addOnFailureListener { reportError("pengaturan toko", it) }
         } catch (e: Exception) {
-            Log.e("FirestoreSync", "Failed to sync settings: ${e.message}", e)
+            reportError("pengaturan toko", e)
         }
     }
 
-    suspend fun deleteNoteFromCloud(noteNumber: String) = withContext(Dispatchers.IO) {
+    fun deleteNoteFromCloud(noteNumber: String) {
         val uid = getUserId() ?: run {
             Log.w("FirestoreSync", "User belum login, delete note dari cloud dibatalkan")
-            return@withContext
+            return
         }
 
         try {
@@ -150,10 +179,10 @@ class FirestoreSyncManager(private val context: Context) {
                 .collection("service_notes")
                 .document(noteNumber)
                 .delete()
-                .await()
+                .addOnSuccessListener { Log.d("FirestoreSync", "Note $noteNumber dihapus dari Firestore") }
+                .addOnFailureListener { reportError("hapus nota $noteNumber", it) }
         } catch (e: Exception) {
-            Log.e("FirestoreSync", "Failed to delete note from cloud: ${e.message}", e)
+            reportError("hapus nota $noteNumber", e)
         }
     }
 }
-

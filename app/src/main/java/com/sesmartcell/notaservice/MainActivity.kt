@@ -31,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,12 +102,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppRoot(viewModel: ServiceViewModel) {
-    val context = LocalContext.current
-    var currentUser by remember { mutableStateOf(AuthManager.getAppUser(context)) }
+    val currentUser by viewModel.sessionUser.collectAsState()
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { _ ->
-            currentUser = AuthManager.getAppUser(context)
+            viewModel.refreshSession()
         }
         AuthManager.auth.addAuthStateListener(listener)
         onDispose {
@@ -117,9 +117,7 @@ fun AppRoot(viewModel: ServiceViewModel) {
     if (currentUser == null) {
         AuthScreen(
             viewModel = viewModel,
-            onAuthSuccess = {
-                currentUser = AuthManager.getAppUser(context)
-            }
+            onAuthSuccess = { viewModel.refreshSession() }
         )
     } else {
         MainAppContainer(

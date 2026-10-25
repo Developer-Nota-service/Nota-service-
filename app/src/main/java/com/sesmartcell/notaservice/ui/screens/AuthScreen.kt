@@ -18,19 +18,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +47,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,24 +56,42 @@ import com.sesmartcell.notaservice.R
 import com.sesmartcell.notaservice.auth.AppUser
 import com.sesmartcell.notaservice.auth.AuthManager
 import com.sesmartcell.notaservice.ui.ServiceViewModel
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlueLight
-import kotlinx.coroutines.launch
 
+/**
+ * Layar autentikasi dengan alur WAJIB berurutan:
+ *  1. Daftar & verifikasi via akun Google
+ *  2. Membuat ID Login & Password
+ *  3. Login dengan ID & Password untuk masuk ke aplikasi
+ *
+ * Seluruh proses berat berjalan di viewModelScope (bukan coroutine composition)
+ * sehingga tidak muncul lagi error "The coroutine scope left the composition".
+ */
 @Composable
 fun AuthScreen(
     viewModel: ServiceViewModel,
     onAuthSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+
     var isLoading by remember { mutableStateOf(false) }
-    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var loginId by remember { mutableStateOf("") }
+    var loginPassword by remember { mutableStateOf("") }
+    var showLoginPassword by remember { mutableStateOf(false) }
+
+    // Hasil verifikasi Google yang belum menyelesaikan langkah 2.
+    var googleUser by remember { mutableStateOf<AppUser?>(null) }
+    var regId by remember { mutableStateOf("") }
+    var regPassword by remember { mutableStateOf("") }
+    var regPasswordConfirm by remember { mutableStateOf("") }
+    var showRegPassword by remember { mutableStateOf(false) }
+    var regError by remember { mutableStateOf<String?>(null) }
+
+    var showForgotDialog by remember { mutableStateOf(false) }
     var forgotIdentifier by remember { mutableStateOf("") }
     var recoveredInfo by remember { mutableStateOf<String?>(null) }
-    var registeredUser by remember { mutableStateOf<AppUser?>(null) }
-    var editableCustomId by remember { mutableStateOf("") }
-    var editableCustomPassword by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -117,7 +143,7 @@ fun AuthScreen(
             )
 
             Text(
-                text = "Masuk & Daftar Otomatis via Akun Google",
+                text = "Daftar via Google → Buat ID & Password → Masuk",
                 fontSize = 13.sp,
                 color = Color(0xFF93C5FD),
                 fontWeight = FontWeight.Medium,
@@ -130,7 +156,7 @@ fun AuthScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B).copy(alpha = 0.95f)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1D2635).copy(alpha = 0.95f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
@@ -146,63 +172,177 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Autentikasi Aman & Cepat",
+                            text = "Masuk dengan ID Login & Password",
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             fontSize = 16.sp
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
-                    Text(
-                        text = "Gunakan akun Google Anda untuk masuk atau mendaftar otomatis. Sistem akan menghasilkan User ID dan Password unik yang terhubung langsung ke database cloud Firebase.",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 18.sp
+                    OutlinedTextField(
+                        value = loginId,
+                        onValueChange = { loginId = it },
+                        label = { Text("ID Login") },
+                        placeholder = { Text("ID Login Anda") },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF94A3B8))
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("login_id_field")
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = loginPassword,
+                        onValueChange = { loginPassword = it },
+                        label = { Text("Password") },
+                        placeholder = { Text("Password Anda") },
+                        singleLine = true,
+                        visualTransformation = if (showLoginPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF94A3B8))
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { showLoginPassword = !showLoginPassword }) {
+                                Icon(
+                                    if (showLoginPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (showLoginPassword) "Sembunyikan password" else "Tampilkan password",
+                                    tint = Color(0xFF94A3B8)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("login_password_field")
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
                         onClick = {
-                            if (!isLoading) {
-                                isLoading = true
-                                scope.launch {
-                                    try {
-                                        val result = AuthManager.signInWithGoogle(context)
-                                        result.fold(
-                                            onSuccess = { user ->
-                                                isLoading = false
-                                                registeredUser = user
-                                                editableCustomId = user.customUserId
-                                                editableCustomPassword = user.customPassword
-                                            },
-                                            onFailure = { error ->
-                                                isLoading = false
-                                                Toast.makeText(
-                                                    context,
-                                                    "Login Gagal: ${error.localizedMessage ?: "Terjadi kesalahan"}",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
-                                            }
-                                        )
-                                    } catch (e: Exception) {
-                                        isLoading = false
+                            if (isLoading) return@Button
+                            if (loginId.isBlank() || loginPassword.isBlank()) {
+                                Toast.makeText(context, "Mohon isi ID Login dan Password", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            isLoading = true
+                            viewModel.loginWithCredentials(context, loginId, loginPassword) { result ->
+                                isLoading = false
+                                result.fold(
+                                    onSuccess = { user ->
                                         Toast.makeText(
                                             context,
-                                            "Login Gagal: ${e.localizedMessage ?: "Terjadi kesalahan"}",
+                                            "Login Berhasil — selamat datang, ${user.displayName}!",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        onAuthSuccess()
+                                    },
+                                    onFailure = { error ->
+                                        Toast.makeText(
+                                            context,
+                                            "Login Gagal: ${error.localizedMessage ?: "Terjadi kesalahan"}",
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }
-                                }
+                                )
                             }
                         },
                         enabled = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
+                            .pressClickScale()
+                            .testTag("login_button"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryBlue,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = if (isLoading) "Memproses..." else "Masuk",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "Belum punya akun? Daftar dengan Google di bawah",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(Color(0xFF334155))
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Pendaftaran Wajib via Akun Google",
+                        color = Color(0xFF93C5FD),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            if (isLoading) return@Button
+                            isLoading = true
+                            viewModel.registerWithGoogle(context) { result ->
+                                isLoading = false
+                                result.fold(
+                                    onSuccess = { user ->
+                                        if (user.registrationComplete) {
+                                            Toast.makeText(
+                                                context,
+                                                "Akun ditemukan — Anda berhasil masuk!",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            onAuthSuccess()
+                                        } else {
+                                            regId = ""
+                                            regPassword = ""
+                                            regPasswordConfirm = ""
+                                            regError = null
+                                            googleUser = user
+                                            Toast.makeText(
+                                                context,
+                                                "Verifikasi Google berhasil — lanjutkan membuat ID Login & Password",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        Toast.makeText(
+                                            context,
+                                            "Daftar via Google Gagal: ${error.localizedMessage ?: "Terjadi kesalahan"}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                )
+                            }
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .pressClickScale()
                             .testTag("google_signin_button"),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White,
@@ -219,7 +359,7 @@ fun AuthScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = if (isLoading) "Memproses..." else "Masuk dengan Google",
+                                text = if (isLoading) "Memproses..." else "Daftar / Masuk dengan Google",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
                             )
@@ -229,24 +369,27 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Setiap akun baru akan mendapatkan User ID & Password otomatis untuk backup akses.",
+                        text = "Verifikasi Google dulu, lalu Anda membuat ID Login & Password sendiri. Data tiap akun terisolasi dan tersinkron ke Firebase.",
                         color = Color(0xFF64748B),
                         fontSize = 11.sp,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        lineHeight = 16.sp
                     )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    androidx.compose.material3.TextButton(
-                        onClick = { showForgotPasswordDialog = true },
-                        modifier = Modifier.testTag("forgot_password_button")
-                    ) {
-                        Text("Lupa Sandi / User ID? Verifikasi Akun", color = PrimaryBlueLight, fontSize = 12.sp)
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            androidx.compose.material3.TextButton(
+                onClick = { showForgotDialog = true },
+                modifier = Modifier
+                    .pressClickScale()
+                    .testTag("forgot_password_button")
+            ) {
+                Text("Lupa Sandi / User ID? Verifikasi Akun", color = PrimaryBlueLight, fontSize = 12.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "Terhubung dengan Firebase Firestore & Cloud Database",
@@ -256,24 +399,147 @@ fun AuthScreen(
             )
         }
 
-        if (showForgotPasswordDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showForgotPasswordDialog = false; recoveredInfo = null; forgotIdentifier = "" },
+        // ==== Dialog langkah 2: buat ID Login & Password ====
+        if (googleUser != null) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = { Text("Buat ID Login & Password", fontWeight = FontWeight.Bold, color = PrimaryBlue) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Akun Google (${googleUser?.email}) berhasil diverifikasi! Sekarang buat ID Login & Password Anda untuk masuk ke aplikasi.",
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = regId,
+                            onValueChange = { regId = it },
+                            label = { Text("ID Login (min. 4 karakter)") },
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = regPassword,
+                            onValueChange = { regPassword = it },
+                            label = { Text("Password (min. 6 karakter)") },
+                            singleLine = true,
+                            visualTransformation = if (showRegPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            trailingIcon = {
+                                IconButton(onClick = { showRegPassword = !showRegPassword }) {
+                                    Icon(
+                                        if (showRegPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = regPasswordConfirm,
+                            onValueChange = { regPasswordConfirm = it },
+                            label = { Text("Konfirmasi Password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (regError != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                regError ?: "",
+                                fontSize = 12.sp,
+                                color = Color(0xFFB91C1C),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "Kredensial ini tersimpan di akun Firebase Anda (password di-hash) dan dipakai untuk login selanjutnya.",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val user = googleUser ?: return@Button
+                            val id = regId.trim()
+                            if (id.length < 4) {
+                                regError = "ID Login minimal 4 karakter."
+                                return@Button
+                            }
+                            if (!id.matches(Regex("^[A-Za-z0-9_.-]+$"))) {
+                                regError = "ID Login hanya boleh huruf, angka, titik, garis bawah, dan strip."
+                                return@Button
+                            }
+                            if (regPassword.length < 6) {
+                                regError = "Password minimal 6 karakter."
+                                return@Button
+                            }
+                            if (regPassword != regPasswordConfirm) {
+                                regError = "Konfirmasi password tidak sama."
+                                return@Button
+                            }
+                            regError = null
+                            viewModel.completeRegistration(context, user, id, regPassword) { result ->
+                                result.fold(
+                                    onSuccess = {
+                                        Toast.makeText(
+                                            context,
+                                            "Pendaftaran Berhasil! Anda otomatis masuk ke aplikasi.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        googleUser = null
+                                        onAuthSuccess()
+                                    },
+                                    onFailure = { error ->
+                                        regError = error.localizedMessage ?: "Gagal menyelesaikan pendaftaran."
+                                    }
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        modifier = Modifier.pressClickScale()
+                    ) {
+                        Text("Simpan & Masuk")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { googleUser = null },
+                        modifier = Modifier.pressClickScale()
+                    ) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        // ==== Dialog lupa sandi / user ID ====
+        if (showForgotDialog) {
+            AlertDialog(
+                onDismissRequest = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
                 title = { Text("Pemulihan Sandi & User ID", fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
                         if (recoveredInfo == null) {
-                            Text("Masukkan Email Google atau No. WhatsApp terdaftar untuk memverifikasi dan melihat kredensial Anda:", fontSize = 13.sp)
+                            Text("Masukkan Email Google atau ID Login terdaftar untuk memverifikasi akun Anda:", fontSize = 13.sp)
                             Spacer(modifier = Modifier.height(10.dp))
                             OutlinedTextField(
                                 value = forgotIdentifier,
                                 onValueChange = { forgotIdentifier = it },
-                                label = { Text("Email / No. WhatsApp") },
+                                label = { Text("Email / ID Login") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
-                            Text("Kredensial Akun Ditemukan:", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                            Text("Data Akun Ditemukan:", fontWeight = FontWeight.Bold, color = Color(0xFF047857))
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(recoveredInfo ?: "", fontSize = 13.sp)
                         }
@@ -283,137 +549,45 @@ fun AuthScreen(
                     if (recoveredInfo == null) {
                         Button(
                             onClick = {
-                                val appUser = AuthManager.getAppUser(context)
-                                val prefs = context.getSharedPreferences("se_smart_cell_auth_prefs", android.content.Context.MODE_PRIVATE)
-                                val savedEmail = prefs.getString("key_user_email", "") ?: ""
-                                val customId = prefs.getString("key_custom_user_id", "") ?: ""
-                                val customPass = prefs.getString("key_custom_password", "") ?: ""
-
-                                if (forgotIdentifier.isNotBlank() && (
-                                    forgotIdentifier.equals(savedEmail, true) ||
-                                        forgotIdentifier.equals(customId, true) ||
-                                        forgotIdentifier.length >= 10
-                                )) {
-                                    recoveredInfo = "User ID: $customId\nPassword: $customPass\nEmail: $savedEmail\n(Verifikasi Berhasil)"
-                                    Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
-                                } else if (appUser != null) {
-                                    recoveredInfo = "User ID: ${appUser.customUserId}\nPassword: ${appUser.customPassword}\nEmail: ${appUser.email ?: "-"}\n(Verifikasi Berhasil via Cache)"
+                                val account = AuthManager.findLocalAccount(context, forgotIdentifier)
+                                if (account != null) {
+                                    recoveredInfo = "User ID: ${account.customUserId}\n" +
+                                        "Email: ${account.email ?: "-"}\n\n" +
+                                        "Password tidak dapat ditampilkan. Masuk lewat akun Google di bawah, " +
+                                        "lalu gunakan \"Reset / Ubah Sandi\" di Pengaturan."
                                     Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Data tidak ditemukan atau belum pernah login dengan Google di perangkat ini.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        "Akun tidak ditemukan di perangkat ini. Silakan daftar via akun Google.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                            modifier = Modifier.pressClickScale()
                         ) {
-                            Text("Verifikasi & Lihat Kredensial")
+                            Text("Verifikasi Akun")
                         }
                     } else {
                         Button(
-                            onClick = { showForgotPasswordDialog = false; recoveredInfo = null; forgotIdentifier = "" },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                            onClick = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                            modifier = Modifier.pressClickScale()
                         ) {
                             Text("Tutup")
                         }
                     }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { showForgotPasswordDialog = false; recoveredInfo = null; forgotIdentifier = "" }) {
-                        Text("Batal")
-                    }
-                }
-            )
-        }
-
-        if (registeredUser != null) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = {},
-                title = { Text("Pendaftaran & Verifikasi Akun", fontWeight = FontWeight.Bold, color = PrimaryBlue) },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "Akun Google (${registeredUser?.email}) berhasil diverifikasi! Silakan konfirmasi atau sesuaikan ID Login & Password unik Anda untuk keamanan akun dan backup data cloud.",
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        OutlinedTextField(
-                            value = editableCustomId,
-                            onValueChange = { editableCustomId = it },
-                            label = { Text("Custom Login ID") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = editableCustomPassword,
-                            onValueChange = { editableCustomPassword = it },
-                            label = { Text("Custom Password") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            "Data servis Anda akan otomatis tersimpan dan terisolasi khusus di cloud untuk akun Google ini.",
-                            fontSize = 11.sp,
-                            color = Color.Gray
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val user = registeredUser ?: return@Button
-                            val prefs = context.getSharedPreferences("se_smart_cell_auth_prefs", android.content.Context.MODE_PRIVATE)
-                            val finalId = editableCustomId.trim().ifBlank { user.customUserId }
-                            val finalPass = editableCustomPassword.trim().ifBlank { user.customPassword }
-
-                            prefs.edit()
-                                .putString("key_custom_user_id", finalId)
-                                .putString("key_custom_password", finalPass)
-                                .apply()
-
-                            scope.launch {
-                                try {
-                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                        .collection("users")
-                                        .document(user.uid)
-                                        .update(
-                                            mapOf(
-                                                "customUserId" to finalId,
-                                                "customPassword" to finalPass,
-                                                "displayName" to user.displayName,
-                                                "loginMethod" to "GOOGLE"
-                                            )
-                                        )
-                                } catch (e: Exception) {
-                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                        .collection("users")
-                                        .document(user.uid)
-                                        .set(
-                                            mapOf(
-                                                "customUserId" to finalId,
-                                                "customPassword" to finalPass,
-                                                "displayName" to user.displayName,
-                                                "email" to (user.email ?: ""),
-                                                "loginMethod" to "GOOGLE",
-                                                "updatedAt" to com.google.firebase.Timestamp.now()
-                                            ),
-                                            com.google.firebase.firestore.SetOptions.merge()
-                                        )
-                                }
-                            }
-
-                            Toast.makeText(context, "Akun Berhasil Didaftarkan & Terverifikasi!", Toast.LENGTH_SHORT).show()
-                            registeredUser = null
-                            onAuthSuccess()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    TextButton(
+                        onClick = { showForgotDialog = false; recoveredInfo = null; forgotIdentifier = "" },
+                        modifier = Modifier.pressClickScale()
                     ) {
-                        Text("Konfirmasi & Masuk")
+                        Text("Batal")
                     }
                 }
             )
         }
     }
 }
-

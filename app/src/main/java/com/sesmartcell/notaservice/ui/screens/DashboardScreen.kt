@@ -72,6 +72,7 @@ import com.sesmartcell.notaservice.R
 import com.sesmartcell.notaservice.data.entity.ServiceNoteEntity
 import com.sesmartcell.notaservice.ui.ServiceViewModel
 import com.sesmartcell.notaservice.ui.components.DeviceTypeBadge
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.components.PaymentStatusBadge
 import com.sesmartcell.notaservice.ui.components.StatusBadge
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
@@ -301,6 +302,7 @@ fun DashboardScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(24.dp)
+                .pressClickScale()
                 .testTag("fab_create_note")
         ) {
             Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -374,7 +376,9 @@ fun StoreHeroHeader(
                         onClick = onCreateClick,
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlueLight),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("hero_create_note_button")
+                        modifier = Modifier
+                            .pressClickScale()
+                            .testTag("hero_create_note_button")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -572,7 +576,10 @@ fun DashboardNoteCard(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp).testTag("mark_paid_${note.noteNumber}")
+                            modifier = Modifier
+                                .pressClickScale()
+                                .height(32.dp)
+                                .testTag("mark_paid_${note.noteNumber}")
                         ) {
                             Text("Lunas", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }

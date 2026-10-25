@@ -1,46 +1,146 @@
 package com.sesmartcell.notaservice.ui
 
 import android.app.Application
+import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.sesmartcell.notaservice.auth.AppUser
+import com.sesmartcell.notaservice.auth.AuthManager
 import com.sesmartcell.notaservice.data.database.AppDatabase
 import com.sesmartcell.notaservice.data.entity.PaymentRecordEntity
 import com.sesmartcell.notaservice.data.entity.ServiceNoteEntity
 import com.sesmartcell.notaservice.data.entity.StoreSettingsEntity
 import com.sesmartcell.notaservice.data.repository.ServiceRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * ViewModel utama.
+ *
+ * - Sesi login dipantau lewat [sessionUser]; [refreshSession] dipanggil di
+ *   setiap transisi auth (login, logout, hapus akun).
+ * - Data lokal tersimpan PER AKUN: tiap uid punya file database Room sendiri
+ *   (lihat AppDatabase) dan seluruh aliran data otomatis berpindah ke
+ *   database akun yang aktif.
+ * - Semua proses auth & simpan berjalan di viewModelScope — tidak tergantung
+ *   pada composition, sehingga bebas dari error
+ *   "The coroutine scope left the composition".
+ * - Setiap aksi simpan/ubah/hapus memberi notifikasi Toast ke pengguna.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ServiceViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database = AppDatabase.getInstance(application)
+    private val appContext = application
     val firestoreSync = com.sesmartcell.notaservice.data.firebase.FirestoreSyncManager(application)
-    val repository = ServiceRepository(
-        serviceNoteDao = database.serviceNoteDao(),
-        paymentRecordDao = database.paymentRecordDao(),
-        storeSettingsDao = database.storeSettingsDao()
-    )
 
-    val allNotes: StateFlow<List<ServiceNoteEntity>> = repository.allNotes.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
+    // ==== Sesi & akun aktif ====
 
-    val allPayments: StateFlow<List<PaymentRecordEntity>> = repository.allPayments.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
+    private val _sessionUser = MutableStateFlow(AuthManager.getAppUser(application))
+    val sessionUser: StateFlow<AppUser?> = _sessionUser.asStateFlow()
 
-    val storeSettings: StateFlow<StoreSettingsEntity> = repository.storeSettings
-        .combine(MutableStateFlow(StoreSettingsEntity())) { settings, default ->
-            settings ?: default
-        }.stateIn(
+    /** uid akun yang sedang aktif — menentukan file database lokal mana yang dipakai. */
+    val activeUserUid = MutableStateFlow(_sessionUser.value?.uid ?: "guest")
+
+    fun refreshSession() {
+        val user = AuthManager.getAppUser(appContext)
+        _sessionUser.value = user
+        activeUserUid.value = user?.uid ?: "guest"
+    }
+
+    // ==== Database lokal PER AKUN ====
+
+    private val repositories = ConcurrentHashMap<String, ServiceRepository>()
+
+    private fun repositoryFor(uid: String): ServiceRepository = repositories.getOrPut(uid) {
+        val database = AppDatabase.getInstanceForUser(appContext, uid)
+        ServiceRepository(
+            serviceNoteDao = database.serviceNoteDao(),
+            paymentRecordDao = database.paymentRecordDao(),
+            storeSettingsDao = database.storeSettingsDao()
+        )
+    }
+
+    private val repository: ServiceRepository
+        get() = repositoryFor(activeUserUid.value)
+
+    init {
+        // Umpan balik kegagalan sinkronisasi cloud (Firebase) ke pengguna.
+        viewModelScope.launch {
+            firestoreSync.syncErrors.collect { message ->
+                if (message.isNotBlank()) notifyUser("$message — data aman di perangkat.")
+            }
+        }
+    }
+
+    private fun notifyUser(message: String) {
+        Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
+    }
+
+    // ==== Autentikasi (wajib: Google -> buat ID & password -> login) ====
+
+    /** Langkah 1: daftar & verifikasi via akun Google. */
+    fun registerWithGoogle(context: Context, onResult: (Result<AppUser>) -> Unit) {
+        viewModelScope.launch {
+            onResult(AuthManager.registerWithGoogle(context))
+        }
+    }
+
+    /** Langkah 2: membuat ID Login & Password setelah verifikasi Google. */
+    fun completeRegistration(
+        context: Context,
+        googleUser: AppUser,
+        customUserId: String,
+        customPassword: String,
+        onResult: (Result<AppUser>) -> Unit
+    ) {
+        viewModelScope.launch {
+            onResult(AuthManager.completeRegistration(context, googleUser, customUserId, customPassword))
+        }
+    }
+
+    /** Langkah 3: login dengan ID Login & Password. */
+    fun loginWithCredentials(
+        context: Context,
+        customUserId: String,
+        password: String,
+        onResult: (Result<AppUser>) -> Unit
+    ) {
+        viewModelScope.launch {
+            onResult(AuthManager.loginWithCredentials(context, customUserId, password))
+        }
+    }
+
+    // ==== Aliran data akun aktif ====
+
+    val allNotes: StateFlow<List<ServiceNoteEntity>> = activeUserUid
+        .flatMapLatest { uid -> repositoryFor(uid).allNotes }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val allPayments: StateFlow<List<PaymentRecordEntity>> = activeUserUid
+        .flatMapLatest { uid -> repositoryFor(uid).allPayments }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val storeSettings: StateFlow<StoreSettingsEntity> = activeUserUid
+        .flatMapLatest { uid -> repositoryFor(uid).storeSettings.map { it ?: StoreSettingsEntity() } }
+        .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = StoreSettingsEntity()
@@ -49,24 +149,6 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     val searchQuery = MutableStateFlow("")
     val selectedStatusFilter = MutableStateFlow("Semua")
     val selectedDeviceFilter = MutableStateFlow("Semua")
-
-    fun signInWithGoogle(
-        context: android.content.Context,
-        onSuccess: (com.sesmartcell.notaservice.auth.AppUser) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            try {
-                val result = com.sesmartcell.notaservice.auth.AuthManager.signInWithGoogle(context)
-                result.fold(
-                    onSuccess = { user -> onSuccess(user) },
-                    onFailure = { e -> onError(e.localizedMessage ?: "Terjadi kesalahan saat masuk") }
-                )
-            } catch (e: Exception) {
-                onError(e.localizedMessage ?: "Terjadi kesalahan")
-            }
-        }
-    }
 
     val filteredNotes: StateFlow<List<ServiceNoteEntity>> = combine(
         allNotes,
@@ -146,6 +228,7 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch {
             val id = repository.saveNoteWithPayment(note, initialPayment, paymentMethod, refNumber)
+            notifyUser("Nota ${note.noteNumber} berhasil disimpan")
             try {
                 firestoreSync.syncNoteToCloud(note)
                 if (initialPayment > 0) {
@@ -160,7 +243,8 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
                         )
                     )
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             onSuccess(id)
         }
     }
@@ -168,9 +252,11 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     fun updateNote(note: ServiceNoteEntity, onSuccess: () -> Unit) {
         viewModelScope.launch {
             repository.updateNote(note)
+            notifyUser("Perubahan nota ${note.noteNumber} berhasil disimpan")
             try {
                 firestoreSync.syncNoteToCloud(note)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             onSuccess()
         }
     }
@@ -178,12 +264,14 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     fun updateStatus(noteNumber: String, newStatus: String) {
         viewModelScope.launch {
             repository.updateStatus(noteNumber, newStatus)
+            notifyUser("Status servis diperbarui: $newStatus")
             try {
                 val note = allNotes.value.find { it.noteNumber == noteNumber }
                 if (note != null) {
                     firestoreSync.syncNoteToCloud(note.copy(serviceStatus = newStatus))
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -206,9 +294,11 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
                 isVerified = true
             )
             val id = repository.addPayment(payment)
+            notifyUser("Pembayaran berhasil dicatat")
             try {
                 firestoreSync.syncPaymentToCloud(payment.copy(id = id))
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             onSuccess()
         }
     }
@@ -216,9 +306,11 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     fun deleteNote(note: ServiceNoteEntity, onDeleted: () -> Unit) {
         viewModelScope.launch {
             repository.deleteNote(note)
+            notifyUser("Nota ${note.noteNumber} berhasil dihapus")
             try {
                 firestoreSync.deleteNoteFromCloud(note.noteNumber)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             onDeleted()
         }
     }
@@ -241,8 +333,10 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
                 val id = repository.addPayment(payment)
                 try {
                     firestoreSync.syncPaymentToCloud(payment.copy(id = id))
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                }
             }
+            notifyUser("Nota ${note.noteNumber} ditandai lunas")
             onSuccess()
         }
     }
@@ -250,9 +344,11 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
     fun updateStoreSettings(settings: StoreSettingsEntity, onSaved: () -> Unit) {
         viewModelScope.launch {
             repository.updateSettings(settings)
+            notifyUser("Pengaturan berhasil disimpan")
             try {
                 firestoreSync.syncSettingsToCloud(settings)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             onSaved()
         }
     }
@@ -277,4 +373,3 @@ data class DashboardStats(
     val totalPiutang: Long,
     val totalNotes: Int
 )
-

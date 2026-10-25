@@ -34,13 +34,15 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var DATABASES: MutableMap<String, AppDatabase> = mutableMapOf()
 
-        private fun resolveDatabaseName(context: Context, userUid: String? = null): String {
-            val uid = userUid
-                ?: context.getSharedPreferences(AuthManager.PREFS_NAME, Context.MODE_PRIVATE)
-                    .getString(AuthManager.KEY_UID, null)
+        private fun resolveUid(context: Context): String {
+            return context.getSharedPreferences(AuthManager.PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(AuthManager.KEY_UID, null)
                 ?: AuthManager.currentUser?.uid
                 ?: "guest"
+        }
 
+        private fun resolveDatabaseName(context: Context, userUid: String? = null): String {
+            val uid = userUid ?: resolveUid(context)
             val safeUid = uid.replace(Regex("[^A-Za-z0-9_.-]"), "_")
             return if (safeUid.isBlank()) {
                 "se_smart_cell_guest.db"
@@ -50,7 +52,21 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         fun getInstance(context: Context): AppDatabase {
-            val databaseName = resolveDatabaseName(context)
+            return getInstanceForUser(context, resolveUid(context))
+        }
+
+        /**
+         * Database LOKAL PER AKUN: setiap uid mendapat file Room tersendiri
+         * (se_smart_cell_<uid>.db) sehingga data antar akun tidak pernah
+         * bercampur, dan penghapusan akun hanya menghapus file akun itu.
+         */
+        fun getInstanceForUser(context: Context, userUid: String): AppDatabase {
+            val safeUid = userUid.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+            val databaseName = if (safeUid.isBlank()) {
+                "se_smart_cell_guest.db"
+            } else {
+                "se_smart_cell_${safeUid}.db"
+            }
 
             return DATABASES[databaseName] ?: synchronized(DATABASES) {
                 DATABASES.getOrPut(databaseName) {

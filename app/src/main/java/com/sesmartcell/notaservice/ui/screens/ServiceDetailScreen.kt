@@ -66,6 +66,7 @@ import com.sesmartcell.notaservice.ui.components.ImageReceiptDialog
 import com.sesmartcell.notaservice.ui.components.PaymentStatusBadge
 import com.sesmartcell.notaservice.ui.components.PrintReceiptDialog
 import com.sesmartcell.notaservice.ui.components.StatusBadge
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.StatusError
 import com.sesmartcell.notaservice.ui.theme.StatusSuccess
@@ -320,6 +321,7 @@ fun ServiceDetailScreen(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .pressClickScale()
                                 .testTag("quick_lunas_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = StatusSuccess),
                             shape = RoundedCornerShape(8.dp)
@@ -335,6 +337,7 @@ fun ServiceDetailScreen(
                         onClick = { showPaymentDialog = true },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .pressClickScale()
                             .testTag("add_payment_dialog_button"),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                         shape = RoundedCornerShape(8.dp)
@@ -387,6 +390,7 @@ fun ServiceDetailScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
+                        .pressClickScale()
                         .testTag("print_receipt_action_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                     shape = RoundedCornerShape(10.dp)
@@ -401,6 +405,7 @@ fun ServiceDetailScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
+                        .pressClickScale()
                         .testTag("image_receipt_action_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp)
@@ -433,6 +438,7 @@ fun ServiceDetailScreen(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .pressClickScale()
                             .testTag("wa_status_button")
                     ) {
                         Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -450,6 +456,7 @@ fun ServiceDetailScreen(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .pressClickScale()
                             .testTag("wa_payment_instruction_button")
                     ) {
                         Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -467,6 +474,7 @@ fun ServiceDetailScreen(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .pressClickScale()
                             .testTag("wa_completion_button")
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -528,6 +536,7 @@ fun ServiceDetailScreen(
             confirmButton = {
                 Button(
                     onClick = { showPaymentSuccessDialog = false },
+                    modifier = Modifier.pressClickScale(),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
                     Text("OK")
@@ -550,6 +559,7 @@ fun ServiceDetailScreen(
                             onNavigateBack()
                         }
                     },
+                    modifier = Modifier.pressClickScale(),
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
                     Text("Hapus Permanen")
