@@ -58,6 +58,7 @@ import com.sesmartcell.notaservice.auth.AuthManager
 import com.sesmartcell.notaservice.ui.ServiceViewModel
 import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
+import com.sesmartcell.notaservice.util.WhatsAppHelper
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlueLight
 
 /**
@@ -548,6 +549,39 @@ fun AuthScreen(
                                 "Klik \"Kirim Email Reset\" — Firebase akan mengirim tautan ganti sandi ke email Google Anda.",
                                 fontSize = 12.sp,
                                 color = Color.Gray
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                val supportNumber = try {
+                                    context.getString(R.string.support_whatsapp_number).trim()
+                                } catch (_: Exception) {
+                                    ""
+                                }
+                                if (supportNumber.isBlank()) {
+                                    Toast.makeText(
+                                        context,
+                                        "Nomor WhatsApp dukungan belum diatur. Gunakan Kirim Email Reset.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } else {
+                                    WhatsAppHelper.openWhatsApp(
+                                        context,
+                                        supportNumber,
+                                        "Halo, saya lupa sandi akun Nota Service. Mohon bantuannya."
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pressClickScale()
+                        ) {
+                            Text(
+                                "Bantuan via WhatsApp",
+                                color = Color(0xFF25D366),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
                             )
                         }
                     }
