@@ -7,18 +7,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:641783365971:android:97d141e824cc5cca9ba1a6",
+        "mobilesdk_app_id": "1:641783365971:android:97d141e824cc5aca9ba1a6",
         "android_client_info": {
           "package_name": "com.sesmartcell.notaservice"
         }
       },
       "oauth_client": [
         {
-          "client_id": "641783365971-bd8st6b2v8lbggdqca657pau736k2dtt.apps.googleusercontent.com",
+          "client_id": "641783365971-f3pg24lnlckubj96tagvpuquo467s282.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.sesmartcell.notaservice",
-            "certificate_hash": "2cd9e8fee97217de225e945457359ae6bbaac0bd0"
+            "certificate_hash": "2cd9e8fee97217de225e945457359ae6bbaac0bd"
           }
         },
         {
