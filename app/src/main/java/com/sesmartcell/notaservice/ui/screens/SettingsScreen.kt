@@ -464,6 +464,12 @@ fun SettingsScreen(
 
             Button(
                 onClick = {
+                    // firestore.rules mensyaratkan nama toko tidak kosong; jika kosong
+                    // pengaturan ditolak server dan tidak tersinkron ke cloud.
+                    if (storeName.isBlank()) {
+                        Toast.makeText(context, "Nama toko wajib diisi", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
                     val updated = currentSettings.copy(
                         storeName = storeName.trim(),
                         storeTagline = storeTagline.trim(),

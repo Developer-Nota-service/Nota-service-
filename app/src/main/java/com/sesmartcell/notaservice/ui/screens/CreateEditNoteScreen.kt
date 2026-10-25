@@ -649,6 +649,12 @@ fun CreateEditNoteScreen(
                         Toast.makeText(context, "Mohon isi Nomor WhatsApp Pelanggan", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
+                    if (customerPhone.trim().length < 7) {
+                        // firestore.rules mensyaratkan nomor telepon 7-50 karakter;
+                        // lebih pendek akan DITOLAK server sehingga nota tidak tersinkron.
+                        Toast.makeText(context, "Nomor WhatsApp minimal 7 angka", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
                     if (brand.isBlank() || model.isBlank()) {
                         Toast.makeText(context, "Mohon lengkapi Merek dan Model perangkat", Toast.LENGTH_SHORT).show()
                         return@Button

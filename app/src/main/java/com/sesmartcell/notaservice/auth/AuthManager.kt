@@ -77,8 +77,23 @@ object AuthManager {
             null
         }
 
-    private val db: FirebaseFirestore
-        get() = Firebase.firestore
+    /**
+     * Instance Firestore mengikuti `firestore_database_id` (satu sumber
+     * kebenaran yang sama dengan FirestoreSyncManager) supaya dokumen akun
+     * dan data sync selalu berada di database yang sama.
+     */
+    private fun firestore(context: Context): FirebaseFirestore {
+        val dbId = try {
+            context.getString(R.string.firestore_database_id)
+        } catch (_: Exception) {
+            ""
+        }.trim()
+        return if (dbId.isNotBlank() && dbId != "(default)") {
+            FirebaseFirestore.getInstance(dbId)
+        } else {
+            Firebase.firestore
+        }
+    }
 
     private fun sessionPrefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -200,7 +215,7 @@ object AuthManager {
 
             // Cek status pendaftaran: server dulu (diizinkan rules utk pemilik),
             // lalu cache lokal — tidak blocking saat offline.
-            val userDocRef = db.collection("users").document(uid)
+            val userDocRef = firestore(context).collection("users").document(uid)
             val snapshot = try {
                 userDocRef.get(Source.SERVER).await()
             } catch (_: Exception) {
@@ -288,7 +303,7 @@ object AuthManager {
         try {
             // Dokumen penuh (bukan merge) agar field lama yang melanggar rules
             // (mis. customPassword plaintext) ikut terganti.
-            db.collection("users").document(uid)
+            firestore(context).collection("users").document(uid)
                 .set(
                     mapOf(
                         "uid" to uid,
@@ -519,7 +534,7 @@ object AuthManager {
         saveRegisteredAccount(context, uid, customUserId, newHash, displayName, email)
 
         try {
-            db.collection("users").document(uid)
+            firestore(context).collection("users").document(uid)
                 .set(
                     mapOf(
                         "uid" to uid,
