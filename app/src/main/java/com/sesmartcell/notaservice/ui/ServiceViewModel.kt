@@ -352,6 +352,15 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
                 } catch (_: Exception) {
                 }
             }
+            // Saat nota ditandai lunas, status pengerjaan otomatis
+            // diperbarui menjadi "Diambil Pelanggan" dan disinkronkan ke cloud.
+            if (note.serviceStatus != "Diambil Pelanggan") {
+                repository.updateStatus(note.noteNumber, "Diambil Pelanggan")
+                try {
+                    firestoreSync.syncNoteToCloud(note.copy(serviceStatus = "Diambil Pelanggan"))
+                } catch (_: Exception) {
+                }
+            }
             notifyUser("Nota ${note.noteNumber} ditandai lunas")
             onSuccess()
         }
