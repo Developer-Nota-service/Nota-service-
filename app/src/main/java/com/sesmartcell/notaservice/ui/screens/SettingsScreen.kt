@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.QrCode
@@ -532,6 +533,43 @@ fun SettingsScreen(
                         ) {
                             Text("SQL & Panduan API", fontSize = 12.sp)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Pull & Restore: pulihkan data dari cloud (Firestore) ke
+                    // perangkat — untuk perangkat baru/pengganti.
+                    var isRestoring by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = {
+                            if (!isRestoring) {
+                                isRestoring = true
+                                viewModel.pullAndRestore { result ->
+                                    isRestoring = false
+                                    if (result.isFailure) {
+                                        Toast.makeText(
+                                            context,
+                                            "Gagal menarik data cloud. Periksa koneksi internet Anda.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isRestoring,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) {
+                        Icon(
+                            Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            if (isRestoring) "Memulihkan data cloud…" else "Pull & Restore dari Cloud",
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }

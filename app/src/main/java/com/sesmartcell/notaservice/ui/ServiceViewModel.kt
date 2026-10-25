@@ -357,6 +357,29 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Pull & Restore: tarik seluruh data akun dari Firestore lalu pulihkan ke
+     * database lokal. Menjaga data tetap aman saat perangkat hilang/rusak —
+     * cukup login di perangkat baru lalu tekan Pulihkan Data di Pengaturan.
+     */
+    fun pullAndRestore(onResult: (Result<Pair<Int, Int>>) -> Unit) {
+        viewModelScope.launch {
+            val pull = firestoreSync.pullAllFromCloud()
+            if (pull.isFailure) {
+                val error = pull.exceptionOrNull()?.message ?: "tidak diketahui"
+                notifyUser("Pull data cloud gagal: $error")
+                onResult(Result.failure(pull.exceptionOrNull() ?: IllegalStateException(error)))
+                return@launch
+            }
+            val data = pull.getOrThrow()
+            val counts = repository.restoreFromCloud(data.notes, data.payments, data.settings)
+            notifyUser(
+                "Restore selesai: ${counts.first} nota & ${counts.second} pembayaran dipulihkan dari cloud"
+            )
+            onResult(Result.success(counts))
+        }
+    }
+
     fun updateStoreSettings(settings: StoreSettingsEntity, onSaved: () -> Unit) {
         viewModelScope.launch {
             repository.updateSettings(settings)

@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.tasks.await
 
 /**
  * Sinkronisasi data per-akun ke Firestore (users/{uid}/service_notes, dst).
@@ -206,5 +207,122 @@ class FirestoreSyncManager(private val context: Context) {
         } catch (e: Exception) {
             reportError("hapus pembayaran nota $noteNumber", e)
         }
+    }
+
+    // ==== PULL & RESTORE: tarik data dari cloud ke perangkat ====
+
+    /**
+     * Hasil tarik data cloud — dipakai ServiceRepository untuk memulihkan
+     * data lokal (upsert) dan ServiceViewModel untuk laporan ke pengguna.
+     */
+    data class CloudPullResult(
+        val notes: List<com.sesmartcell.notaservice.data.entity.ServiceNoteEntity>,
+        val payments: List<PaymentRecordEntity>,
+        val settings: StoreSettingsEntity?
+    )
+
+    /**
+     * Menarik seluruh data milik akun (service_notes, payment_records,
+     * store_settings) dari Firestore. Dipakai fitur Pull & Restore agar data
+     * aman saat perangkat hilang/rusak: cukup login di perangkat baru lalu
+     * pulihkan data dari cloud.
+     *
+     * Butuh koneksi internet — offline akan mengembalikan Result.failure.
+     */
+    suspend fun pullAllFromCloud(): Result<CloudPullResult> {
+        val uid = getUserId() ?: run {
+            return Result.failure(IllegalStateException("User belum login, tidak bisa menarik data cloud."))
+        }
+
+        return try {
+            val userRoot = db.collection("users").document(uid)
+
+            val notes = userRoot.collection("service_notes").get().await()
+                .documents.mapNotNull { doc -> doc.toServiceNote() }
+
+            val payments = userRoot.collection("payment_records").get().await()
+                .documents.mapNotNull { doc -> doc.toPaymentRecord() }
+
+            // Pengaturan toko best-effort: akun baru mungkin belum punya dokumen.
+            val settings = try {
+                val doc = userRoot.collection("store_settings").document("default").get().await()
+                if (doc.exists()) doc.toStoreSettings() else null
+            } catch (_: Exception) {
+                null
+            }
+
+            Log.d("FirestoreSync", "Pull selesai: ${notes.size} nota, ${payments.size} pembayaran")
+            Result.success(CloudPullResult(notes, payments, settings))
+        } catch (e: Exception) {
+            reportError("pull data cloud", e)
+            Result.failure(e)
+        }
+    }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toServiceNote(): com.sesmartcell.notaservice.data.entity.ServiceNoteEntity? {
+        val number = getString("noteNumber") ?: return null
+        return com.sesmartcell.notaservice.data.entity.ServiceNoteEntity(
+            noteNumber = number,
+            entryDate = getLong("entryDate") ?: System.currentTimeMillis(),
+            customerName = getString("customerName") ?: "",
+            customerPhone = getString("customerPhone") ?: "",
+            deviceType = getString("deviceType") ?: "",
+            brand = getString("brand") ?: "",
+            model = getString("model") ?: "",
+            imeiOrSerial = getString("imeiOrSerial") ?: "",
+            accessories = getString("accessories") ?: "",
+            issueDescription = getString("issueDescription") ?: "",
+            technicianCheckResult = getString("technicianCheckResult") ?: "",
+            repairAction = getString("repairAction") ?: "",
+            serviceFee = getLong("serviceFee") ?: 0L,
+            sparepartFee = getLong("sparepartFee") ?: 0L,
+            discount = getLong("discount") ?: 0L,
+            downPayment = getLong("downPayment") ?: 0L,
+            estimatedCompletionDate = getString("estimatedCompletionDate") ?: "",
+            technicianName = getString("technicianName") ?: "Teknisi SE SMART",
+            serviceStatus = getString("serviceStatus") ?: "Menunggu",
+            warrantyPeriod = getString("warrantyPeriod") ?: "30 Hari",
+            warrantyEndDate = getString("warrantyEndDate") ?: "",
+            initialPaymentMethod = getString("initialPaymentMethod") ?: "Tunai",
+            notes = getString("notes") ?: "",
+            // updatedAt di cloud adalah Timestamp server, bukan angka.
+            updatedAt = getTimestamp("updatedAt")?.toDate()?.time ?: System.currentTimeMillis()
+        )
+    }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toPaymentRecord(): PaymentRecordEntity? {
+        // Doc id di cloud = id baris lokal saat disinkronkan, supaya hasil
+        // restore memakai id yang sama dan sinkron berikutnya tetap menimpa
+        // dokumen yang sama.
+        val id = id.toLongOrNull() ?: return null
+        return PaymentRecordEntity(
+            id = id,
+            noteNumber = getString("noteNumber") ?: return null,
+            amount = getLong("amount") ?: 0L,
+            paymentMethod = getString("paymentMethod") ?: "Tunai",
+            referenceNumber = getString("referenceNumber") ?: "",
+            paymentDate = getLong("paymentDate") ?: System.currentTimeMillis(),
+            paymentType = getString("paymentType") ?: "Pembayaran",
+            isVerified = getBoolean("isVerified") ?: true,
+            notes = getString("notes") ?: ""
+        )
+    }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toStoreSettings(): StoreSettingsEntity? {
+        val storeName = getString("storeName") ?: return null
+        return StoreSettingsEntity(
+            storeName = storeName,
+            storeTagline = getString("storeTagline") ?: "Service Smartphone & Laptop Profesional",
+            storeAddress = getString("storeAddress") ?: "",
+            storePhone = getString("storePhone") ?: "",
+            qrisMerchantName = getString("qrisMerchantName") ?: "",
+            // qrisImagePath & adminPin tidak disinkronkan ke cloud — Repository
+            // mempertahankan nilai lokal saat restore.
+            qrisImagePath = "",
+            bankAccounts = getString("bankAccounts") ?: "",
+            ewalletAccounts = getString("ewalletAccounts") ?: "",
+            warrantyTerms = getString("warrantyTerms") ?: StoreSettingsEntity().warrantyTerms,
+            adminPin = StoreSettingsEntity().adminPin
+        )
     }
 }

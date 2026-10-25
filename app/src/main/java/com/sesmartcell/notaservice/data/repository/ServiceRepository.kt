@@ -85,6 +85,36 @@ class ServiceRepository(
         storeSettingsDao.insertOrUpdate(settings)
     }
 
+    /**
+     * Pull & Restore: memulihkan data dari cloud ke database lokal.
+     * Upsert (REPLACE) berdasarkan noteNumber (nota) dan id (pembayaran),
+     * sehingga aman dijalankan berulang — data lokal tidak pernah dihapus,
+     * hanya diperbarui/ditambah dari cloud.
+     *
+     * Pengaturan toko hanya menimpa field yang tersinkron di cloud;
+     * qrisImagePath & adminPin lokal dipertahankan.
+     *
+     * @return Pair(jumlah nota, jumlah pembayaran) yang dipulihkan.
+     */
+    suspend fun restoreFromCloud(
+        notes: List<ServiceNoteEntity>,
+        payments: List<PaymentRecordEntity>,
+        settings: StoreSettingsEntity?
+    ): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        notes.forEach { serviceNoteDao.insertNote(it) }
+        payments.forEach { paymentRecordDao.insertPayment(it) }
+        if (settings != null) {
+            val existing = storeSettingsDao.getSettingsSync()
+            storeSettingsDao.insertOrUpdate(
+                settings.copy(
+                    qrisImagePath = existing?.qrisImagePath ?: "",
+                    adminPin = existing?.adminPin ?: settings.adminPin
+                )
+            )
+        }
+        notes.size to payments.size
+    }
+
     suspend fun generateNextNoteNumber(): String = withContext(Dispatchers.IO) {
         val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
         val datePrefix = "SC-${dateFormat.format(Date())}"
