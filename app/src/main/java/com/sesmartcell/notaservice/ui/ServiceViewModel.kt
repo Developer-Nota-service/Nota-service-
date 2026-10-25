@@ -240,17 +240,20 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         onSuccess: (Long) -> Unit
     ) {
         viewModelScope.launch {
-            val id = repository.saveNoteWithPayment(note, initialPayment, paymentMethod, refNumber)
+            val (id, paymentId) = repository.saveNoteWithPayment(note, initialPayment, paymentMethod, refNumber)
             notifyUser("Nota ${note.noteNumber} berhasil disimpan")
             try {
                 firestoreSync.syncNoteToCloud(note)
-                if (initialPayment > 0) {
+                // Pakai id pembayaran hasil insert agar tiap DP punya dokumen
+                // cloud sendiri — id 0 akan menimpa satu dokumen yang sama.
+                if (paymentId > 0) {
                     firestoreSync.syncPaymentToCloud(
                         PaymentRecordEntity(
+                            id = paymentId,
                             noteNumber = note.noteNumber,
                             amount = initialPayment,
                             paymentMethod = paymentMethod,
-                            referenceNumber = refNumber,
+                            referenceNumber = refNumber.ifBlank { "DP-${System.currentTimeMillis() % 10000}" },
                             paymentDate = System.currentTimeMillis(),
                             paymentType = if (initialPayment >= note.totalCost) "Pelunasan" else "DP"
                         )

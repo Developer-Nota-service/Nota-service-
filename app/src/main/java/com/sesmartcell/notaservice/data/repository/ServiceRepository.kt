@@ -32,15 +32,22 @@ class ServiceRepository(
         storeSettingsDao.getSettingsSync() ?: StoreSettingsEntity()
     }
 
+    /**
+     * Menyimpan nota beserta pembayaran awal (DP) jika ada.
+     * [Pair.first] = id nota, [Pair.second] = id pembayaran awal (-1L jika tanpa DP).
+     * Id pembayaran dikembalikan agar sinkronisasi cloud memakai doc id yang sama
+     * dengan baris lokal, bukan menimpa satu dokumen yang sama.
+     */
     suspend fun saveNoteWithPayment(
         note: ServiceNoteEntity,
         initialPayment: Long,
         paymentMethod: String,
         refNumber: String
-    ): Long = withContext(Dispatchers.IO) {
+    ): Pair<Long, Long> = withContext(Dispatchers.IO) {
         val insertedId = serviceNoteDao.insertNote(note)
+        var paymentId = -1L
         if (initialPayment > 0) {
-            paymentRecordDao.insertPayment(
+            paymentId = paymentRecordDao.insertPayment(
                 PaymentRecordEntity(
                     noteNumber = note.noteNumber,
                     amount = initialPayment,
@@ -51,7 +58,7 @@ class ServiceRepository(
                 )
             )
         }
-        insertedId
+        insertedId to paymentId
     }
 
     suspend fun updateNote(note: ServiceNoteEntity) = withContext(Dispatchers.IO) {

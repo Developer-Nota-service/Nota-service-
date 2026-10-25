@@ -187,5 +187,24 @@ class FirestoreSyncManager(private val context: Context) {
         } catch (e: Exception) {
             reportError("hapus nota $noteNumber", e)
         }
+
+        // Pembayaran milik nota ikut dihapus dari cloud supaya tidak menyisakan
+        // data yatim (orphan) di payment_records.
+        try {
+            db.collection("users")
+                .document(uid)
+                .collection("payment_records")
+                .whereEqualTo("noteNumber", noteNumber)
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    for (doc in snapshot.documents) {
+                        doc.reference.delete()
+                            .addOnFailureListener { reportError("hapus pembayaran nota $noteNumber", it) }
+                    }
+                }
+                .addOnFailureListener { reportError("hapus pembayaran nota $noteNumber", it) }
+        } catch (e: Exception) {
+            reportError("hapus pembayaran nota $noteNumber", e)
+        }
     }
 }
