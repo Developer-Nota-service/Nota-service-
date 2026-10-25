@@ -17,3 +17,7 @@ local.properties
 .env
 debug.keystore
 *-debug.log
+
+# Keystore signing tidak boleh masuk git (lihat docs/production-checklist.md)
+*.jks
+*.keystore

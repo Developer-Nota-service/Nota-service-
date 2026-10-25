@@ -21,20 +21,30 @@ android {
     }
 
     signingConfigs {
-        // Password default "android" cocok dengan my-upload-key.jks yang
-        // ter-commit di repo. CI/lokal bisa menimpanya lewat env
-        // KEYSTORE_PASSWORD / KEY_PASSWORD (mis. untuk keystore rahasia).
+        // Keystore TIDAK lagi di-commit di repo: key lama (my-upload-key.jks,
+        // password "android") dianggap kompromi dan sudah diputar. Lokasi
+        // keystore diatur lewat env KEYSTORE_FILE (mis. volume di sandbox /
+        // CI); developer lokal bisa membuat keystore sendiri dengan perintah
+        // di docs/production-checklist.md. Password & alias diambil dari env
+        // KEYSTORE_PASSWORD / KEY_PASSWORD / KEY_ALIAS.
+        val keystoreFile = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+            ?.let { file(it) }
+            ?: file("${rootDir}/my-upload-key.jks")
+        val storePass = System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+        val keyAliasEnv = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
+        val keyPass = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+
         create("release") {
-            storeFile = file("${rootDir}/my-upload-key.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
-            keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
-            keyPassword = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+            storeFile = keystoreFile
+            storePassword = storePass
+            keyAlias = keyAliasEnv
+            keyPassword = keyPass
         }
         create("debugConfig") {
-            storeFile = file("${rootDir}/my-upload-key.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
-            keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
-            keyPassword = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+            storeFile = keystoreFile
+            storePassword = storePass
+            keyAlias = keyAliasEnv
+            keyPassword = keyPass
         }
     }
 

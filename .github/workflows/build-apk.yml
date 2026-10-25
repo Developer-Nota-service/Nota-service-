@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build debug APK
+    name: Build APK and run unit tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -38,10 +38,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Signing: app/build.gradle.kts signs every variant with <root>/my-upload-key.jks,
-      # which is committed to the repository, so checkout alone makes the APK
-      # signable. A KEYSTORE_BASE64 secret overrides the committed keystore when set.
-      - name: Prepare Firebase config and signing inputs
+      # Keystore TIDAK lagi ter-commit di repo (diputar karena key lama bocor).
+      # CI memakai secret KEYSTORE_BASE64 bila tersedia; kalau belum diisi,
+      # keystore sementara dibuat supaya CI tetap menghasilkan artefak — tetapi
+      # APK dari keystore sementara TIDAK bisa meng-update instalasi sebelumnya.
+      - name: Prepare Firebase config and signing keystore
         shell: bash
         env:
           FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
@@ -64,27 +65,24 @@ jobs:
             cp 'app/google-services (1).json' app/google-services.json
           fi
 
-          # Optional: replace the committed upload keystore with the secret one.
           if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > se-smart-cell.jks
+          else
+            echo "::warning::Secret KEYSTORE_BASE64 belum diisi — membuat keystore sementara. APK ini TIDAK bisa meng-update instalasi sebelumnya."
+            keytool -genkeypair -keystore se-smart-cell.jks -alias upload \
+              -storepass "${KEYSTORE_PASSWORD:-android}" -keypass "${KEYSTORE_PASSWORD:-android}" \
+              -dname "CN=SE SMART CELL, O=SE SMART CELL, C=ID" \
+              -keyalg RSA -keysize 2048 -validity 10000
           fi
 
-          # Guard: a keystore from KEYSTORE_BASE64 whose password does not match
-          # KEYSTORE_PASSWORD (default "android" from app/build.gradle.kts) would
-          # abort packaging. Validate it; on mismatch fall back to the committed
-          # keystore so CI still produces a signed APK.
-          effective_pass="${KEYSTORE_PASSWORD:-android}"
-          if ! keytool -list -keystore my-upload-key.jks -storepass "$effective_pass" 2>/dev/null | grep -q "^upload,"; then
-            echo "::warning::Keystore tidak cocok dengan password/alias signing — memakai keystore ter-commit di repo."
-            git checkout -- my-upload-key.jks
-            if ! keytool -list -keystore my-upload-key.jks -storepass android 2>/dev/null | grep -q "^upload,"; then
-              echo "::error::Keystore ter-commit juga tidak valid dengan password 'android'."
-              exit 1
-            fi
-          fi
+      - name: Run unit tests
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/se-smart-cell.jks
+        run: ./gradlew --no-daemon --no-configuration-cache testDebugUnitTest
 
       - name: Build debug APK
         env:
+          KEYSTORE_FILE: ${{ github.workspace }}/se-smart-cell.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -98,3 +96,12 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 7
