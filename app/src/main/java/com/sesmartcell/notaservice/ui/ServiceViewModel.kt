@@ -104,7 +104,13 @@ class ServiceViewModel(application: Application) : AndroidViewModel(application)
         onResult: (Result<AppUser>) -> Unit
     ) {
         viewModelScope.launch {
-            onResult(AuthManager.completeRegistration(context, googleUser, customUserId, customPassword))
+            val result = AuthManager.completeRegistration(context, googleUser, customUserId, customPassword)
+            if (result.isSuccess) {
+                // Akun baru mulai dari nol: buang repository cache uid ini agar
+                // aliran data mengambil database baru yang sudah bersih.
+                repositories.remove(googleUser.uid)
+            }
+            onResult(result)
         }
     }
 

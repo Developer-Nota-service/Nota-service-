@@ -46,8 +46,11 @@ class FirestoreSyncManager(private val context: Context) {
     /** Pesan error sinkronisasi terakhir — dikumpulkan ViewModel untuk notifikasi. */
     val syncErrors: SharedFlow<String> = _syncErrors.asSharedFlow()
 
+    // Akun sesi aplikasi dipakai PERTAMA agar data cloud selalu tersinkron ke
+    // path akun yang datanya sedang aktif di layar — tidak pernah ke akun lain
+    // meski sesi Firebase di perangkat sempat berbeda.
     private fun getUserId(): String? =
-        AuthManager.currentUser?.uid ?: AuthManager.getAppUser(context)?.uid
+        AuthManager.getAppUser(context)?.uid ?: AuthManager.currentUser?.uid
 
     private fun reportError(operation: String, error: Exception?) {
         val message = "Sinkron cloud gagal ($operation)" +
