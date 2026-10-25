@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,8 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Payment
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
@@ -52,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -267,7 +271,75 @@ fun ServiceDetailScreen(
                         Text("Rincian Biaya & Pembayaran", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         PaymentStatusBadge(totalCost = note.totalCost, totalPaid = totalPaid)
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Indikator status pembayaran yang jelas + progres pembayaran.
+                    val isLunasNow = sisa <= 0
+                    val isPartialPaid = !isLunasNow && totalPaid > 0
+                    val (bannerBg, bannerFg) = when {
+                        isLunasNow -> Color(0xFFD1FAE5) to Color(0xFF047857)
+                        isPartialPaid -> Color(0xFFFEF3C7) to Color(0xFFB45309)
+                        else -> Color(0xFFFEE2E2) to Color(0xFFB91C1C)
+                    }
+                    val (bannerLabel, bannerDesc) = when {
+                        isLunasNow -> "LUNAS" to "Pembayaran nota ini sudah lengkap. Terima kasih!"
+                        isPartialPaid -> "DP / SEBAGIAN" to
+                            "Terbayar ${FormatUtils.formatRupiah(totalPaid)} dari ${FormatUtils.formatRupiah(note.totalCost)}"
+                        else -> "BELUM BAYAR" to "Belum ada pembayaran masuk untuk nota ini"
+                    }
+                    val bannerIcon = when {
+                        isLunasNow -> Icons.Default.CheckCircle
+                        isPartialPaid -> Icons.Default.Payment
+                        else -> Icons.Default.Warning
+                    }
+                    val paidFraction = if (note.totalCost > 0) {
+                        (totalPaid.toFloat() / note.totalCost).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(bannerBg)
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(bannerIcon, contentDescription = null, tint = bannerFg, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(bannerLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = bannerFg)
+                                Text(bannerDesc, fontSize = 11.sp, color = bannerFg)
+                            }
+                        }
+                        if (!isLunasNow) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(bannerFg.copy(alpha = 0.2f))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(paidFraction)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(bannerFg)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Terbayar ${(paidFraction * 100).toInt()}% • Sisa tagihan ${FormatUtils.formatRupiah(sisa)}",
+                                fontSize = 11.sp,
+                                color = bannerFg,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Biaya Jasa", fontSize = 13.sp)
@@ -316,19 +388,39 @@ fun ServiceDetailScreen(
                                     refNumber = "Lunas Cepat",
                                     type = "Pelunasan"
                                 ) {
-                                    Toast.makeText(context, "Nota berhasil ditandai Lunas!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        "Nota Lunas! Status pengerjaan otomatis: Diambil Pelanggan",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                                // Saat nota ditandai lunas, status pengerjaan
+                                // langsung diperbarui menjadi "Diambil Pelanggan"
+                                // (juga tersinkron ke cloud).
+                                if (note.serviceStatus != "Diambil Pelanggan") {
+                                    viewModel.updateStatus(note.noteNumber, "Diambil Pelanggan")
                                 }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(52.dp)
                                 .pressClickScale()
                                 .testTag("quick_lunas_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = StatusSuccess),
-                            shape = RoundedCornerShape(8.dp)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = StatusSuccess,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("⚡ Tandai Nota Ini Lunas", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Tandai Nota Ini Lunas", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Sisa ${FormatUtils.formatRupiah(sisa)} • Status otomatis: Diambil Pelanggan",
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
