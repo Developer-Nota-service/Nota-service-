@@ -69,6 +69,7 @@ import com.sesmartcell.notaservice.ui.components.DeviceTypeBadge
 import com.sesmartcell.notaservice.ui.components.PaymentStatusBadge
 import com.sesmartcell.notaservice.ui.components.PrintReceiptDialog
 import com.sesmartcell.notaservice.ui.components.StatusBadge
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.StatusError
 import com.sesmartcell.notaservice.util.FormatUtils
@@ -120,7 +121,9 @@ fun ServiceListScreen(
                 onClick = onNavigateToCreate,
                 containerColor = PrimaryBlue,
                 contentColor = Color.White,
-                modifier = Modifier.testTag("list_fab_create")
+                modifier = Modifier
+                    .pressClickScale()
+                    .testTag("list_fab_create")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Buat Nota")
             }
@@ -267,6 +270,7 @@ fun ServiceListScreen(
                             Toast.makeText(context, "Nota dihapus", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    modifier = Modifier.pressClickScale(),
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
                     Text("Hapus")
@@ -360,7 +364,10 @@ fun ServiceListItemCard(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp).testTag("list_mark_paid_${note.noteNumber}")
+                            modifier = Modifier
+                                .pressClickScale()
+                                .height(30.dp)
+                                .testTag("list_mark_paid_${note.noteNumber}")
                         ) {
                             Text("Lunas", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }

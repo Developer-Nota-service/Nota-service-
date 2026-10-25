@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -212,7 +213,9 @@ REST API ENDPOINTS REFERENSI:
                         Text("Skema MySQL (database.sql)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         OutlinedButton(
                             onClick = { copyToClipboard("database.sql", sqlSchema) },
-                            modifier = Modifier.testTag("copy_sql_button")
+                            modifier = Modifier
+                                .pressClickScale()
+                                .testTag("copy_sql_button")
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))

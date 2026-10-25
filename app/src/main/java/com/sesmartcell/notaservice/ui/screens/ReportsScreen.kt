@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sesmartcell.notaservice.ui.ServiceViewModel
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.StatusSuccess
 import com.sesmartcell.notaservice.ui.theme.StatusWarning
@@ -301,6 +302,7 @@ fun ReportsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
+                    .pressClickScale()
                     .testTag("export_csv_button"),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
                 shape = RoundedCornerShape(10.dp)

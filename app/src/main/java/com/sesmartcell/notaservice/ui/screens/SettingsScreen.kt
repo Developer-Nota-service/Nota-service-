@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sesmartcell.notaservice.auth.AuthManager
 import com.sesmartcell.notaservice.ui.ServiceViewModel
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import kotlinx.coroutines.launch
 import java.io.File
@@ -204,9 +205,11 @@ fun SettingsScreen(
                             onClick = {
                                 AuthManager.signOut(context, scopeForAccount) {
                                     Toast.makeText(context, "Berhasil keluar dari akun", Toast.LENGTH_SHORT).show()
+                                    viewModel.refreshSession()
                                 }
                             },
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.pressClickScale()
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -226,7 +229,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = "Kredensial Login Otomatis:",
+                        text = "Kredensial Login Anda:",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         color = Color(0xFF1E3A8A)
@@ -245,7 +248,7 @@ fun SettingsScreen(
                             color = Color(0xFF1E293B)
                         )
                         Text(
-                            text = "Password: ${appUser?.customPassword ?: "-"}",
+                            text = "Password: ${if (appUser == null) "-" else "••••••"}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF1E293B)
@@ -256,7 +259,9 @@ fun SettingsScreen(
 
                     OutlinedButton(
                         onClick = { showResetPasswordDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pressClickScale(),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Reset / Ubah Sandi Cadangan", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
@@ -266,7 +271,9 @@ fun SettingsScreen(
 
                     Button(
                         onClick = { showDeleteAccountDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pressClickScale(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -475,6 +482,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
+                    .pressClickScale()
                     .testTag("save_settings_button"),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(10.dp)
@@ -577,6 +585,7 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     Button(
+                        modifier = Modifier.pressClickScale(),
                         onClick = {
                             if (newPasswordInput.length >= 6) {
                                 val success = AuthManager.updateCustomPassword(context, newPasswordInput.trim())
@@ -621,8 +630,10 @@ fun SettingsScreen(
                             AuthManager.deleteAccountAndResetLocalData(context, scopeForAccount) {
                                 showDeleteAccountDialog = false
                                 Toast.makeText(context, "Akun dan data lokal berhasil dihapus", Toast.LENGTH_SHORT).show()
+                                viewModel.refreshSession()
                             }
                         },
+                        modifier = Modifier.pressClickScale(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
                     ) {
                         Text("Hapus")

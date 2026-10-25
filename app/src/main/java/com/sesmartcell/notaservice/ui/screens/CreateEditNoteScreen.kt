@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sesmartcell.notaservice.data.entity.ServiceNoteEntity
 import com.sesmartcell.notaservice.ui.ServiceViewModel
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.StatusSuccess
 import com.sesmartcell.notaservice.util.FormatUtils
@@ -706,6 +707,7 @@ fun CreateEditNoteScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
+                    .pressClickScale()
                     .testTag("save_note_submit_button"),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(12.dp)
@@ -731,6 +733,7 @@ fun CreateEditNoteScreen(
                             showSuccessDialog = false
                             onNoteSaved(savedNoteIdToNavigate)
                         },
+                        modifier = Modifier.pressClickScale(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
                         Text("OK")

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sesmartcell.notaservice.data.entity.ServiceNoteEntity
 import com.sesmartcell.notaservice.data.entity.StoreSettingsEntity
+import com.sesmartcell.notaservice.ui.components.pressClickScale
 import com.sesmartcell.notaservice.ui.theme.PrimaryBlue
 import com.sesmartcell.notaservice.ui.theme.StatusSuccess
 import com.sesmartcell.notaservice.util.FormatUtils
@@ -199,7 +200,9 @@ fun PrintReceiptDialog(
                     onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                modifier = Modifier.testTag("confirm_print_button")
+                modifier = Modifier
+                    .pressClickScale()
+                    .testTag("confirm_print_button")
             ) {
                 Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
@@ -300,6 +303,7 @@ fun ImageReceiptDialog(
                         },
                         modifier = Modifier
                             .weight(1f)
+                            .pressClickScale()
                             .testTag("download_receipt_button")
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -320,6 +324,7 @@ fun ImageReceiptDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
                         modifier = Modifier
                             .weight(1f)
+                            .pressClickScale()
                             .testTag("share_whatsapp_image_button")
                     ) {
                         Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
